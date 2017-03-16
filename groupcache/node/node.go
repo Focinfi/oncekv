@@ -3,13 +3,17 @@ package node
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"reflect"
 	"sort"
 	"strings"
 	"sync"
+
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang/groupcache"
@@ -43,9 +47,10 @@ func New(addr string, masterAddr string) *Node {
 	cache := &Node{
 		master: strings.TrimSuffix(masterAddr, "/"),
 		addr:   addr,
-		pool:   newPool(addr),
 	}
+
 	cache.Engine = newServer(cache)
+	cache.pool = newPool(cache, addr)
 
 	return cache
 }
@@ -136,22 +141,51 @@ func (n *Node) handleMeta(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, nil)
 }
 
-var getterFunc = groupcache.GetterFunc(func(ctx groupcache.Context, key string, dest groupcache.Sink) error {
+func (n *Node) fetchData(ctx groupcache.Context, key string, dest groupcache.Sink) error {
+	var data = make(chan []byte)
+	var done bool
+	for _, db := range n.dbs {
+		go func(url string) {
+			res, err := http.Get(fmt.Sprintf("%s/%s", url, key))
+			if err != nil {
+				log.Println("fetchData err: ", err)
+				return
+			}
+			defer res.Body.Close()
+
+			val, err := ioutil.ReadAll(res.Body)
+			if len(val) > 0 {
+				n.Lock()
+				if !done {
+					done = true
+					data <- val
+				}
+				n.Unlock()
+			}
+		}(db)
+	}
+
+	select {
+	case <-time.After(time.Second * 5):
+		return errors.New("database connection refused")
+	case val := <-data:
+		dest.SetBytes(val)
+	}
 
 	return nil
-})
+}
 
-func newPool(addr string) *groupcache.HTTPPool {
+func newPool(node *Node, addr string) *groupcache.HTTPPool {
 	pool := groupcache.NewHTTPPoolOpts("http://"+addr,
 		&groupcache.HTTPPoolOptions{
 			BasePath: basePath,
 		})
 
-	newGroup("message")
+	newGroup(node, "message")
 	return pool
 }
 
-func newGroup(name string) {
+func newGroup(n *Node, name string) {
 	// TODO: make cacheBizes to be configurable
-	groupcache.NewGroup(name, 1<<32, getterFunc)
+	groupcache.NewGroup(name, 1<<32, groupcache.GetterFunc(n.fetchData))
 }

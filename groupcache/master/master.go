@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Focinfi/oncekv/master"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/gin-gonic/gin"
 )
@@ -68,6 +69,7 @@ func New(addr string) *Master {
 
 // Start starts the master listening on addr
 func (m *Master) Start() {
+	go m.watchDBs()
 	go m.heartbeat()
 	log.Fatal(m.server.Run(m.addr))
 }
@@ -232,4 +234,49 @@ func (m *Master) removeNode(node string) {
 
 	log.Println(node, " remoted")
 	m.Unlock()
+}
+
+func (m *Master) watchDBs() {
+	ch := m.store.Watch(context.TODO(), master.StoreKey)
+
+	for {
+		resp := <-ch
+		if resp.Canceled {
+			ch = m.store.Watch(context.TODO(), master.StoreKey)
+			continue
+		}
+
+		if err := resp.Err(); err != nil {
+			log.Println("failed to watch dbs, err: ", err.Error())
+		}
+
+		for _, event := range resp.Events {
+			if event.IsModify() {
+				m.syncDBs()
+			}
+		}
+	}
+}
+
+func (m *Master) syncDBs() error {
+	res, err := m.store.Get(context.TODO(), master.StoreKey)
+	if err != nil {
+		return err
+	}
+
+	if len(res.Kvs) == 0 {
+		return errors.New("dbs data lost")
+	}
+
+	dbs := []string{}
+	if err := json.Unmarshal(res.Kvs[0].Value, &dbs); err != nil {
+		return err
+	}
+
+	m.Lock()
+	defer m.Unlock()
+
+	m.dbs = dbs
+
+	return nil
 }

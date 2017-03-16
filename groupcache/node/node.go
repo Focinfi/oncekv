@@ -146,7 +146,7 @@ func (n *Node) fetchData(ctx groupcache.Context, key string, dest groupcache.Sin
 	var done bool
 	for _, db := range n.dbs {
 		go func(url string) {
-			res, err := http.Get(fmt.Sprintf("%s/%s", url, key))
+			res, err := http.Get(fmt.Sprintf("%s/%s", strings.TrimSuffix(url, "/"), key))
 			if err != nil {
 				log.Println("fetchData err: ", err)
 				return

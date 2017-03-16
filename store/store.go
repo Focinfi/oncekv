@@ -8,6 +8,7 @@ package store
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -17,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Focinfi/oncekv/boltdb"
+	"github.com/Focinfi/oncekv/raftboltdb"
 	"github.com/hashicorp/raft"
 )
 
@@ -121,7 +122,7 @@ func (s *Store) Set(key, value string) error {
 	}
 
 	c := &command{
-		Op:    "set",
+		Op:    "add",
 		Key:   key,
 		Value: value,
 	}
@@ -176,6 +177,8 @@ func (f *fsm) Apply(l *raft.Log) interface{} {
 	}
 
 	switch c.Op {
+	case "add":
+		return f.applyAdd(c.Key, c.Value)
 	case "set":
 		return f.applySet(c.Key, c.Value)
 	case "delete":
@@ -214,6 +217,17 @@ func (f *fsm) Restore(rc io.ReadCloser) error {
 func (f *fsm) applySet(key, value string) interface{} {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.m[key] = value
+	return nil
+}
+
+func (f *fsm) applyAdd(key, value string) interface{} {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.m[key]; ok {
+		return errors.New("key duplicated")
+	}
+
 	f.m[key] = value
 	return nil
 }

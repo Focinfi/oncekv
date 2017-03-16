@@ -10,8 +10,8 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/otoolep/hraftd/http"
-	"github.com/otoolep/hraftd/store"
+	"github.com/Focinfi/oncekv/httpd"
+	"github.com/Focinfi/oncekv/store"
 )
 
 // Command line defaults
@@ -59,9 +59,7 @@ func main() {
 	}
 
 	h := httpd.New(httpAddr, s)
-	if err := h.Start(); err != nil {
-		log.Fatalf("failed to start HTTP service: %s", err.Error())
-	}
+	h.Start()
 
 	// If join was specified, make the join request.
 	if joinAddr != "" {

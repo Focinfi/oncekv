@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 
-rm -rf node_1
-oncekv node_1
+rm -rf data/node_1
+oncekv data/node_1

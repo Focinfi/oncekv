@@ -58,7 +58,7 @@ func main() {
 		log.Fatalf("failed to open store: %s", err.Error())
 	}
 
-	h := httpd.New(httpAddr, s)
+	h := httpd.New(httpAddr, raftAddr, s)
 	h.Start()
 
 	// If join was specified, make the join request.

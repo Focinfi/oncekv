@@ -145,13 +145,18 @@ func (n *Node) fetchData(ctx groupcache.Context, key string, dest groupcache.Sin
 	var data = make(chan []byte)
 	var done bool
 	for _, db := range n.dbs {
-		go func(url string) {
-			res, err := http.Get(fmt.Sprintf("%s/%s", strings.TrimSuffix(url, "/"), key))
+		url := competeAddr(db)
+		go func() {
+			res, err := http.Get(fmt.Sprintf("%s/i/key/%s", strings.TrimSuffix(url, "/"), key))
 			if err != nil {
 				log.Println("fetchData err: ", err)
 				return
 			}
 			defer res.Body.Close()
+
+			if res.StatusCode != http.StatusOK {
+				return
+			}
 
 			val, err := ioutil.ReadAll(res.Body)
 			if len(val) > 0 {
@@ -162,7 +167,7 @@ func (n *Node) fetchData(ctx groupcache.Context, key string, dest groupcache.Sin
 				}
 				n.Unlock()
 			}
-		}(db)
+		}()
 	}
 
 	select {

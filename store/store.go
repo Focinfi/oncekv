@@ -18,8 +18,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Focinfi/oncekv/raft"
 	"github.com/Focinfi/oncekv/raftboltdb"
-	"github.com/hashicorp/raft"
 )
 
 const (
@@ -165,6 +165,11 @@ func (s *Store) Join(addr string) error {
 	}
 	s.logger.Printf("node at %s joined successfully", addr)
 	return nil
+}
+
+// Peers returns the raft peers
+func (s *Store) Peers() ([]string, error) {
+	return s.raft.Peers()
 }
 
 type fsm Store

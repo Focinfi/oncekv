@@ -3,8 +3,8 @@ package raftboltdb
 import (
 	"errors"
 
+	"github.com/Focinfi/oncekv/raft"
 	"github.com/boltdb/bolt"
-	"github.com/hashicorp/raft"
 )
 
 const (

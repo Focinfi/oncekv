@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/Focinfi/oncekv/master"
 	"github.com/Focinfi/oncekv/raftboltdb"
 	"github.com/gin-gonic/gin"
 )
@@ -25,23 +26,28 @@ type Store interface {
 
 	// Join joins the node, reachable at addr, to the cluster.
 	Join(addr string) error
+
+	// Peers returns the store peers
+	Peers() ([]string, error)
 }
 
 // Service provides HTTP service.
 type Service struct {
-	addr string
-	ln   net.Listener
+	httpAddr string
+	raftAddr string
+	ln       net.Listener
 	*gin.Engine
 
 	store Store
 }
 
 // New returns an uninitialized HTTP service.
-func New(addr string, store Store) *Service {
+func New(httpAddr string, raftAddr string, store Store) *Service {
 	s := &Service{
-		addr:   addr,
-		store:  store,
-		Engine: gin.Default(),
+		httpAddr: httpAddr,
+		raftAddr: raftAddr,
+		store:    store,
+		Engine:   gin.Default(),
 	}
 
 	s.GET("/i/key/:key", s.handleGet)
@@ -53,28 +59,38 @@ func New(addr string, store Store) *Service {
 
 // Start starts the service.
 func (s *Service) Start() {
+	log.Println("Try to start")
 	go func() {
-		if err := s.Run(s.addr); err != nil {
+		if err := s.Run(s.httpAddr); err != nil {
 			panic(err)
 		}
 	}()
+
+	if err := s.register(); err != nil {
+		panic(err)
+	}
+
+	log.Println("Try to update peers")
+	if err := s.updatePeers(); err != nil {
+		log.Println("oncekv httpd: failed to update peers")
+	}
 }
 
 func (s *Service) handleGet(ctx *gin.Context) {
 	key := ctx.Param("key")
 	if key == "" {
-		ctx.JSON(http.StatusOK, StatusParamsError)
+		ctx.JSON(http.StatusBadRequest, StatusParamsError)
 		return
 	}
 
 	val, err := s.store.Get(key)
 	if err != nil {
-		ctx.JSON(http.StatusOK, StatusInternalError)
+		ctx.JSON(http.StatusInternalServerError, StatusInternalError)
 		return
 	}
 
 	if val == "" {
-		ctx.JSON(http.StatusOK, StatusKeyNotFound)
+		ctx.JSON(http.StatusNotFound, StatusKeyNotFound)
 		return
 	}
 
@@ -124,4 +140,37 @@ func (s *Service) handleJoin(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, StatusOK)
+
+	go func() {
+		if err := s.updatePeers(); err != nil {
+			log.Println(err)
+		}
+	}()
+}
+
+func (s *Service) updatePeers() error {
+	raftPeers, err := s.store.Peers()
+	if err != nil {
+		return err
+	}
+
+	if len(raftPeers) == 0 {
+		return master.Default.UpdatePeers([]string{s.httpAddr})
+	}
+
+	peers := []string{}
+	for _, raftAddr := range raftPeers {
+		peer, err := master.Default.PeerHTTPAddr(raftAddr)
+		if err != nil {
+			return err
+		}
+
+		peers = append(peers, peer)
+	}
+
+	return master.Default.UpdatePeers(peers)
+}
+
+func (s *Service) register() error {
+	return master.Default.RegisterPeer(s.raftAddr, s.httpAddr)
 }

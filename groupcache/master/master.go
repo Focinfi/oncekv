@@ -197,6 +197,10 @@ func (m *Master) heartbeat() {
 }
 
 func (m *Master) sendPeers(node string, nodes []string) error {
+	if err := m.syncDBs(); err != nil {
+		return err
+	}
+
 	params := peerParam{Peers: nodes, DBs: m.dbs}
 
 	b, err := json.Marshal(&params)
@@ -241,6 +245,7 @@ func (m *Master) watchDBs() {
 
 	for {
 		resp := <-ch
+		log.Printf("WatchDBs: %v\n", string(resp.Events[0].Kv.Value))
 		if resp.Canceled {
 			ch = m.store.Watch(context.TODO(), master.StoreKey)
 			continue
@@ -259,23 +264,13 @@ func (m *Master) watchDBs() {
 }
 
 func (m *Master) syncDBs() error {
-	res, err := m.store.Get(context.TODO(), master.StoreKey)
+	dbs, err := master.Default.Peers()
 	if err != nil {
-		return err
-	}
-
-	if len(res.Kvs) == 0 {
-		return errors.New("dbs data lost")
-	}
-
-	dbs := []string{}
-	if err := json.Unmarshal(res.Kvs[0].Value, &dbs); err != nil {
 		return err
 	}
 
 	m.Lock()
 	defer m.Unlock()
-
 	m.dbs = dbs
 
 	return nil

@@ -15,6 +15,7 @@ import (
 
 	"time"
 
+	groupcachehttp "github.com/Focinfi/oncekv/groupcache/http"
 	"github.com/gin-gonic/gin"
 	"github.com/golang/groupcache"
 )
@@ -33,7 +34,7 @@ type Node struct {
 	master string
 	dbs    []string
 	peers  []string
-	pool   *groupcache.HTTPPool
+	pool   *groupcachehttp.HTTPPool
 	*gin.Engine
 }
 
@@ -142,47 +143,71 @@ func (n *Node) handleMeta(ctx *gin.Context) {
 }
 
 func (n *Node) fetchData(ctx groupcache.Context, key string, dest groupcache.Sink) error {
+	var dbs = make([]string, len(n.dbs))
+	copy(dbs, n.dbs)
+	if len(dbs) == 0 {
+		return errors.New("no database")
+	}
+
 	var data = make(chan []byte)
 	var done bool
-	for _, db := range n.dbs {
+	var completedCount int
+
+	for _, db := range dbs {
 		url := competeAddr(db)
 		go func() {
-			res, err := http.Get(fmt.Sprintf("%s/i/key/%s", strings.TrimSuffix(url, "/"), key))
+			url = fmt.Sprintf("%s/i/key/%s", strings.TrimSuffix(url, "/"), key)
+			fmt.Println("URL: ", url)
+			res, err := http.Get(url)
 			if err != nil {
 				log.Println("fetchData err: ", err)
-				return
 			}
 			defer res.Body.Close()
 
-			if res.StatusCode != http.StatusOK {
+			val, err := ioutil.ReadAll(res.Body)
+
+			n.Lock()
+			defer n.Unlock()
+
+			completedCount++
+			if completedCount == len(dbs) {
+				if res.StatusCode == http.StatusOK {
+					go func() { data <- val }()
+					return
+				}
+
+				go func() { data <- nil }()
 				return
 			}
 
-			val, err := ioutil.ReadAll(res.Body)
-			if len(val) > 0 {
-				n.Lock()
+			if res.StatusCode == http.StatusOK {
 				if !done {
 					done = true
-					data <- val
+					go func() { data <- val }()
 				}
-				n.Unlock()
 			}
+
 		}()
 	}
 
 	select {
-	case <-time.After(time.Second * 5):
-		return errors.New("database connection refused")
+	case <-time.After(time.Millisecond * 300):
+		fmt.Println("timeout")
+		return errors.New("timeout")
 	case val := <-data:
-		dest.SetBytes(val)
-	}
+		fmt.Printf("Val: '%s'", string(val))
+		if len(val) > 0 {
+			dest.SetString(string(val))
+			return nil
+		}
 
-	return nil
+		return errors.New("not found")
+	}
 }
 
-func newPool(node *Node, addr string) *groupcache.HTTPPool {
-	pool := groupcache.NewHTTPPoolOpts("http://"+addr,
-		&groupcache.HTTPPoolOptions{
+func newPool(node *Node, addr string) *groupcachehttp.HTTPPool {
+	pool := groupcachehttp.NewHTTPPoolOpts("http://"+addr,
+		&groupcachehttp.HTTPPoolOptions{
 			BasePath: basePath,
 		})
 

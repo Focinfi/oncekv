@@ -85,6 +85,7 @@ func (s *Service) handleGet(ctx *gin.Context) {
 
 	val, err := s.store.Get(key)
 	if err != nil {
+		fmt.Println("Get Error: ", val, err)
 		ctx.JSON(http.StatusInternalServerError, StatusInternalError)
 		return
 	}

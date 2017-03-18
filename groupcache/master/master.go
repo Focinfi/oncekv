@@ -19,6 +19,7 @@ import (
 const defaultHeartbeatPeriod = time.Second * 1
 const defaultKey = "oncekv.groupcache.master"
 const defaultEtcdEndpoint = "localhost:2379"
+const defaultAddr = ":5550"
 
 // Master for a group of caching nodes
 type Master struct {
@@ -274,4 +275,11 @@ func (m *Master) syncDBs() error {
 	m.dbs = dbs
 
 	return nil
+}
+
+var defaultMaster = New(defaultAddr)
+
+// Peers returns peers of defaultKey
+func Peers() ([]string, error) {
+	return defaultMaster.fetchNodes()
 }

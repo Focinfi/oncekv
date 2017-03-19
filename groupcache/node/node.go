@@ -26,6 +26,7 @@ const (
 	masterJoinURLFormat = "%s/join"
 	dbGetURLFormat      = "%s/i/key/%s"
 	dbQueryTimeout      = time.Millisecond * 300
+	gorupCacheBytes     = 1 << 32
 )
 
 var (
@@ -114,17 +115,15 @@ func newServer(c *Node) *gin.Engine {
 }
 
 func newPool(node *Node, addr string) *groupcache.HTTPPool {
-	pool := groupcache.NewHTTPPoolOpts(urlutil.MakeURL(addr),
+	return groupcache.NewHTTPPoolOpts(urlutil.MakeURL(addr),
 		&groupcache.HTTPPoolOptions{
 			BasePath: basePath,
 		})
-
-	return pool
 }
 
 func newGroup(n *Node, name string) *groupcache.Group {
 	// TODO: make cacheBizes to be configurable
-	return groupcache.NewGroup(name, 1<<32, groupcache.GetterFunc(n.fetchData))
+	return groupcache.NewGroup(name, gorupCacheBytes, groupcache.GetterFunc(n.fetchData))
 }
 
 func (n *Node) join() {

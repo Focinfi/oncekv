@@ -256,7 +256,7 @@ func (kv *KV) fetchValue(key string, timeout time.Duration, url string) (value s
 	errChan := make(chan error)
 
 	go func() {
-		res, err := http.Get(fmt.Sprintf("%s/sqs/message/%s", urlutil.MakeURL(url), key))
+		res, err := http.Get(fmt.Sprintf("%s/key/%s", urlutil.MakeURL(url), key))
 		if err != nil {
 			errChan <- err
 			return

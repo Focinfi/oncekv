@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Focinfi/oncekv/master"
+	"github.com/Focinfi/oncekv/utils/urlutil"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/gin-gonic/gin"
 )
@@ -21,6 +22,30 @@ const defaultKey = "oncekv.groupcache.master"
 const defaultEtcdEndpoint = "localhost:2379"
 const defaultAddr = ":5550"
 
+type nodesMap map[string]string // httpAddr/nodeAddr
+
+func (p nodesMap) httpAddrs() []string {
+	addrs := make([]string, len(p))
+	i := 0
+	for k := range p {
+		addrs[i] = k
+		i++
+	}
+
+	return addrs
+}
+
+func (p nodesMap) nodeAddrs() []string {
+	addrs := make([]string, len(p))
+	i := 0
+	for k := range p {
+		addrs[i] = p[k]
+		i++
+	}
+
+	return addrs
+}
+
 // Master for a group of caching nodes
 type Master struct {
 	sync.RWMutex
@@ -28,9 +53,9 @@ type Master struct {
 	server *gin.Engine
 	store  *clientv3.Client
 
-	nodeKey string
-	nodeMap map[string]bool
-	dbs     []string
+	nodeKey  string
+	nodesMap nodesMap
+	dbs      []string
 }
 
 type peerParam struct {
@@ -56,12 +81,12 @@ func New(addr string) *Master {
 		nodeKey: defaultKey,
 	}
 
-	nodes, err := master.fetchNodes()
+	nodesMap, err := master.fetchNodesMap()
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("Nodes: ", nodes)
-	master.setNodes(nodes)
+	fmt.Println("Nodes: ", nodesMap)
+	master.setNodesMap(nodesMap)
 
 	master.server = newServer(master)
 
@@ -82,74 +107,52 @@ func newServer(m *Master) *gin.Engine {
 	return server
 }
 
-func (m *Master) nodes() []string {
-	nodes := make([]string, len(m.nodeMap))
-	i := 0
-	for k := range m.nodeMap {
-		nodes[i] = k
-		i++
-	}
-
-	return nodes
-}
-
-func (m *Master) setNodes(nodes []string) {
-	newNodeMap := make(map[string]bool)
-	for _, node := range nodes {
-		newNodeMap[node] = true
-	}
-
+func (m *Master) setNodesMap(peers nodesMap) {
 	m.Lock()
 	defer m.Unlock()
 
-	m.nodeMap = newNodeMap
+	m.nodesMap = peers
 }
 
 func (m *Master) handleGetNodes(ctx *gin.Context) {
 	path := ctx.Request.URL.Path
 	m.RLock()
-	if _, ok := m.nodeMap[path]; !ok {
+	if _, ok := m.nodesMap[path]; !ok {
 		m.RUnlock()
 		ctx.JSON(http.StatusMethodNotAllowed, nil)
 		return
 	}
 
-	ctx.JSON(http.StatusOK, m.nodes())
+	ctx.JSON(http.StatusOK, m.nodesMap.httpAddrs())
 	m.RUnlock()
 }
 
 func (m *Master) handleJoinNode(ctx *gin.Context) {
 	var params = &struct {
-		Addr string `json:"addr"`
+		HTTPAddr string `json:"httpAddr"`
+		NodeAddr string `json:"nodeAddr"`
 	}{}
 
 	err := ctx.BindJSON(params)
-	if err != nil || params.Addr == "" {
+	if err != nil || params.HTTPAddr == "" || params.NodeAddr == "" {
 		ctx.JSON(http.StatusBadRequest, nil)
 		return
 	}
 
 	m.Lock()
-	if _, ok := m.nodeMap[params.Addr]; ok {
-		m.Unlock()
-		ctx.JSON(http.StatusBadRequest, nil)
-		return
-	}
-
-	m.nodeMap[params.Addr] = true
-	nodes := m.nodes()
-	if err := m.updateNodes(nodes); err != nil {
+	m.nodesMap[urlutil.MakeURL(params.HTTPAddr)] = urlutil.MakeURL(params.NodeAddr)
+	if err := m.updateNodesMap(m.nodesMap); err != nil {
 		ctx.JSON(http.StatusInternalServerError, nil)
 		m.Unlock()
 		return
 	}
 
+	ctx.JSON(http.StatusOK, peerParam{Peers: m.nodesMap.httpAddrs(), DBs: m.dbs})
 	m.Unlock()
-	ctx.JSON(http.StatusOK, peerParam{Peers: nodes, DBs: m.dbs})
 }
 
-func (m *Master) fetchNodes() ([]string, error) {
-	nodes := []string{}
+func (m *Master) fetchNodesMap() (nodesMap, error) {
+	nodes := nodesMap{}
 
 	val, err := m.store.Get(context.TODO(), m.nodeKey)
 	if err != nil || len(val.Kvs) == 0 {
@@ -163,8 +166,8 @@ func (m *Master) fetchNodes() ([]string, error) {
 	return nodes, nil
 }
 
-func (m *Master) updateNodes(nodes []string) error {
-	b, err := json.Marshal(nodes)
+func (m *Master) updateNodesMap(peers nodesMap) error {
+	b, err := json.Marshal(peers)
 	if err != nil {
 		return err
 	}
@@ -183,15 +186,17 @@ func (m *Master) heartbeat() {
 	for {
 		<-ticker.C
 		m.RLock()
-		nodes := m.nodes()
-		for k := range m.nodeMap {
+		nodesMap := m.nodesMap
+		httpAddrs := nodesMap.httpAddrs()
+		nodePeers := nodesMap.nodeAddrs()
+		for _, nodeURL := range httpAddrs {
 			go func(node string) {
-				err := m.sendPeers(node, nodes)
+				err := m.sendPeers(node, nodePeers)
 				if err != nil {
 					fmt.Println("ERR: ", err.Error())
 					m.removeNode(node)
 				}
-			}(k)
+			}(nodeURL)
 		}
 		m.RUnlock()
 	}
@@ -209,7 +214,7 @@ func (m *Master) sendPeers(node string, nodes []string) error {
 		return err
 	}
 
-	res, err := http.Post(fmt.Sprintf("http://%s/meta", node), "application/json", bytes.NewReader(b))
+	res, err := http.Post(fmt.Sprintf("%s/meta", urlutil.MakeURL(node)), "application/json", bytes.NewReader(b))
 
 	if err != nil {
 		return err
@@ -224,20 +229,20 @@ func (m *Master) sendPeers(node string, nodes []string) error {
 	return err
 }
 
-func (m *Master) removeNode(node string) {
+func (m *Master) removeNode(peer string) {
 	m.Lock()
-	if _, ok := m.nodeMap[node]; !ok {
+	if _, ok := m.nodesMap[peer]; !ok {
 		m.Unlock()
 		return
 	}
 
-	delete(m.nodeMap, node)
+	delete(m.nodesMap, peer)
 
-	if err := m.updateNodes(m.nodes()); err != nil {
+	if err := m.updateNodesMap(m.nodesMap); err != nil {
 		log.Println("etcd error: " + err.Error())
 	}
 
-	log.Println(node, " remoted")
+	log.Println(peer, " remoted")
 	m.Unlock()
 }
 
@@ -281,5 +286,10 @@ var defaultMaster = New(defaultAddr)
 
 // Peers returns peers of defaultKey
 func Peers() ([]string, error) {
-	return defaultMaster.fetchNodes()
+	peers, err := defaultMaster.fetchNodesMap()
+	if err != nil {
+		return nil, err
+	}
+
+	return peers.httpAddrs(), nil
 }

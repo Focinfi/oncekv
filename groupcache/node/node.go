@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"reflect"
 	"sort"
@@ -15,13 +14,16 @@ import (
 
 	"time"
 
-	groupcachehttp "github.com/Focinfi/oncekv/groupcache/http"
+	"github.com/Focinfi/oncekv/log"
+	"github.com/Focinfi/sqs/util/urlutil"
 	"github.com/gin-gonic/gin"
 	"github.com/golang/groupcache"
 )
 
 const basePath = "/sqs/"
 const defaultGroup = "message"
+
+var ErrDataNotFound = errors.New("groupcache: data not found")
 
 type getter interface {
 	Get(key string) string
@@ -30,11 +32,13 @@ type getter interface {
 // Node for one groupcahe server
 type Node struct {
 	sync.RWMutex
-	addr   string
-	master string
-	dbs    []string
-	peers  []string
-	pool   *groupcachehttp.HTTPPool
+	httpAddr string
+	nodeAddr string
+	master   string
+	dbs      []string
+	peers    []string
+	pool     *groupcache.HTTPPool
+	group    *groupcache.Group
 	*gin.Engine
 }
 
@@ -44,14 +48,16 @@ type masterParam struct {
 }
 
 // New returns a new Node with the addr
-func New(addr string, masterAddr string) *Node {
+func New(httpAddr string, nodeAddr string, masterAddr string) *Node {
 	cache := &Node{
-		master: strings.TrimSuffix(masterAddr, "/"),
-		addr:   addr,
+		master:   strings.TrimSuffix(masterAddr, "/"),
+		httpAddr: httpAddr,
+		nodeAddr: nodeAddr,
 	}
 
 	cache.Engine = newServer(cache)
-	cache.pool = newPool(cache, addr)
+	cache.pool = newPool(cache, nodeAddr)
+	cache.group = newGroup(cache, "message")
 
 	return cache
 }
@@ -59,21 +65,39 @@ func New(addr string, masterAddr string) *Node {
 // Start starts the server
 func (n *Node) Start() {
 	n.join()
-	n.Run(n.addr)
+	go http.ListenAndServe(n.nodeAddr, n.pool)
+	n.Run(n.httpAddr)
 }
 
 func newServer(c *Node) *gin.Engine {
 	server := gin.Default()
 	server.POST("/meta", c.handleMeta)
-	server.GET("/sqs/message/:key", func(ctx *gin.Context) {
-		c.pool.ServeHTTP(ctx.Writer, ctx.Request)
+	server.GET("/key/:key", func(ctx *gin.Context) {
+		result := &groupcache.ByteView{}
+		err := c.group.Get(ctx.Request.Context(), ctx.Param("key"), groupcache.ByteViewSink(result))
+		if err == ErrDataNotFound {
+			ctx.JSON(http.StatusNotFound, nil)
+			return
+		}
+
+		if err != nil {
+			log.DB.Error(err)
+			ctx.JSON(http.StatusInternalServerError, nil)
+			return
+		}
+
+		ctx.Writer.Write(result.ByteSlice())
+		ctx.Writer.WriteHeader(http.StatusOK)
 	})
 	return server
 }
 
 func (n *Node) join() {
 	// build join param
-	b, err := json.Marshal(map[string]string{"addr": n.addr})
+	b, err := json.Marshal(map[string]string{
+		"httpAddr": n.httpAddr,
+		"nodeAddr": n.nodeAddr,
+	})
 	if err != nil {
 		panic(err)
 	}
@@ -159,19 +183,22 @@ func (n *Node) fetchData(ctx groupcache.Context, key string, dest groupcache.Sin
 			url = fmt.Sprintf("%s/i/key/%s", strings.TrimSuffix(url, "/"), key)
 			fmt.Println("URL: ", url)
 			res, err := http.Get(url)
+			var val []byte
+			var statusCode int
 			if err != nil {
-				log.Println("fetchData err: ", err)
+				log.DB.Println("fetchData err: ", err)
+			} else {
+				val, err = ioutil.ReadAll(res.Body)
+				statusCode = res.StatusCode
+				res.Body.Close()
 			}
-			defer res.Body.Close()
-
-			val, err := ioutil.ReadAll(res.Body)
 
 			n.Lock()
 			defer n.Unlock()
 
 			completedCount++
 			if completedCount == len(dbs) {
-				if res.StatusCode == http.StatusOK {
+				if statusCode == http.StatusOK {
 					go func() { data <- val }()
 					return
 				}
@@ -201,21 +228,20 @@ func (n *Node) fetchData(ctx groupcache.Context, key string, dest groupcache.Sin
 			return nil
 		}
 
-		return errors.New("not found")
+		return ErrDataNotFound
 	}
 }
 
-func newPool(node *Node, addr string) *groupcachehttp.HTTPPool {
-	pool := groupcachehttp.NewHTTPPoolOpts("http://"+addr,
-		&groupcachehttp.HTTPPoolOptions{
+func newPool(node *Node, addr string) *groupcache.HTTPPool {
+	pool := groupcache.NewHTTPPoolOpts(urlutil.MakeURL(addr),
+		&groupcache.HTTPPoolOptions{
 			BasePath: basePath,
 		})
 
-	newGroup(node, "message")
 	return pool
 }
 
-func newGroup(n *Node, name string) {
+func newGroup(n *Node, name string) *groupcache.Group {
 	// TODO: make cacheBizes to be configurable
-	groupcache.NewGroup(name, 1<<32, groupcache.GetterFunc(n.fetchData))
+	return groupcache.NewGroup(name, 1<<32, groupcache.GetterFunc(n.fetchData))
 }

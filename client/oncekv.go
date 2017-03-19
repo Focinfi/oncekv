@@ -15,10 +15,12 @@ import (
 // Client for requesting oncekv
 type Client struct {
 	sync.RWMutex
-	dbs       []string
-	caches    []string
+	dbs    []string
+	caches []string
+	// last fast enough cache server URL
 	fastCache string
-	fastDB    string
+	// last fast enough database server URL
+	fastDB string
 }
 
 // New returns a new Client and ready to use
@@ -76,7 +78,7 @@ func (c *Client) update() error {
 	}
 	sort.StringSlice(caches).Sort()
 
-	log.Biz.Println("oncekv meta:", dbs, caches)
+	log.Biz.Infoln(logPrefix, dbs, caches)
 
 	c.RLock()
 	if reflect.DeepEqual(c.dbs, dbs) &&

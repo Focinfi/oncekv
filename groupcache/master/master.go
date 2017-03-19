@@ -6,23 +6,29 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"sync"
 	"time"
 
+	"github.com/Focinfi/oncekv/log"
 	"github.com/Focinfi/oncekv/master"
 	"github.com/Focinfi/oncekv/utils/urlutil"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/gin-gonic/gin"
 )
 
-const defaultHeartbeatPeriod = time.Second * 1
-const defaultKey = "oncekv.groupcache.master"
-const defaultEtcdEndpoint = "localhost:2379"
-const defaultAddr = ":5550"
+const (
+	defaultHeartbeatPeriod = time.Second * 1
+	defaultKey             = "oncekv.groupcache.master"
+	defaultEtcdEndpoint    = "localhost:2379"
+	defaultAddr            = ":5550"
+	jsonHTTPHeader         = "application/json"
+	heartbeatURLFormat     = "%s/meta"
+	logPrefix              = "groupcache/master"
+)
 
-type nodesMap map[string]string // httpAddr/nodeAddr
+// nodesMap is pairs of httpAddr/nodeAddr
+type nodesMap map[string]string
 
 func (p nodesMap) httpAddrs() []string {
 	addrs := make([]string, len(p))
@@ -46,21 +52,25 @@ func (p nodesMap) nodeAddrs() []string {
 	return addrs
 }
 
-// Master for a group of caching nodes
-type Master struct {
-	sync.RWMutex
-	addr   string
-	server *gin.Engine
-	store  *clientv3.Client
-
-	nodeKey  string
-	nodesMap nodesMap
-	dbs      []string
-}
-
 type peerParam struct {
 	Peers []string `json:"peers"`
 	DBs   []string `json:"dbs"`
+}
+
+// Master for a group of caching nodes
+type Master struct {
+	// runtime data
+	sync.RWMutex
+	nodesMap nodesMap
+	dbs      []string
+
+	// http server
+	server *gin.Engine
+	addr   string
+
+	// databse store
+	store       *clientv3.Client
+	nodesMapKey string
 }
 
 // New returns a new Master with the addr
@@ -76,20 +86,20 @@ func New(addr string) *Master {
 	}
 
 	master := &Master{
-		addr:    addr,
-		store:   store,
-		nodeKey: defaultKey,
+		addr:        addr,
+		store:       store,
+		nodesMapKey: defaultKey,
 	}
 
 	nodesMap, err := master.fetchNodesMap()
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("Nodes: ", nodesMap)
-	master.setNodesMap(nodesMap)
 
+	log.Biz.Infoln(logPrefix, "Nodes: ", nodesMap)
+
+	master.nodesMap = nodesMap
 	master.server = newServer(master)
-
 	return master
 }
 
@@ -97,13 +107,12 @@ func New(addr string) *Master {
 func (m *Master) Start() {
 	go m.watchDBs()
 	go m.heartbeat()
-	log.Fatal(m.server.Run(m.addr))
+	log.Biz.Fatal(m.server.Run(m.addr))
 }
 
 func newServer(m *Master) *gin.Engine {
 	server := gin.Default()
 	server.POST("/join", m.handleJoinNode)
-	server.GET("/nodes", m.handleGetNodes)
 	return server
 }
 
@@ -112,19 +121,6 @@ func (m *Master) setNodesMap(peers nodesMap) {
 	defer m.Unlock()
 
 	m.nodesMap = peers
-}
-
-func (m *Master) handleGetNodes(ctx *gin.Context) {
-	path := ctx.Request.URL.Path
-	m.RLock()
-	if _, ok := m.nodesMap[path]; !ok {
-		m.RUnlock()
-		ctx.JSON(http.StatusMethodNotAllowed, nil)
-		return
-	}
-
-	ctx.JSON(http.StatusOK, m.nodesMap.httpAddrs())
-	m.RUnlock()
 }
 
 func (m *Master) handleJoinNode(ctx *gin.Context) {
@@ -154,13 +150,13 @@ func (m *Master) handleJoinNode(ctx *gin.Context) {
 func (m *Master) fetchNodesMap() (nodesMap, error) {
 	nodes := nodesMap{}
 
-	val, err := m.store.Get(context.TODO(), m.nodeKey)
+	val, err := m.store.Get(context.TODO(), m.nodesMapKey)
 	if err != nil || len(val.Kvs) == 0 {
-		return nodes, err
+		return nil, err
 	}
 
 	if err := json.Unmarshal(val.Kvs[0].Value, &nodes); err != nil {
-		return nodes, err
+		return nil, err
 	}
 
 	return nodes, nil
@@ -172,7 +168,7 @@ func (m *Master) updateNodesMap(peers nodesMap) error {
 		return err
 	}
 
-	_, err = m.store.Put(context.TODO(), m.nodeKey, string(b))
+	_, err = m.store.Put(context.TODO(), m.nodesMapKey, string(b))
 	if err != nil {
 		return err
 	}
@@ -187,18 +183,18 @@ func (m *Master) heartbeat() {
 		<-ticker.C
 		m.RLock()
 		nodesMap := m.nodesMap
-		httpAddrs := nodesMap.httpAddrs()
+		m.RUnlock()
+
 		nodePeers := nodesMap.nodeAddrs()
-		for _, nodeURL := range httpAddrs {
+		for _, nodeURL := range nodesMap.httpAddrs() {
 			go func(node string) {
 				err := m.sendPeers(node, nodePeers)
 				if err != nil {
-					fmt.Println("ERR: ", err.Error())
+					log.Internal.Errorln(logPrefix, "node error:", err)
 					m.removeNode(node)
 				}
 			}(nodeURL)
 		}
-		m.RUnlock()
 	}
 }
 
@@ -214,7 +210,7 @@ func (m *Master) sendPeers(node string, nodes []string) error {
 		return err
 	}
 
-	res, err := http.Post(fmt.Sprintf("%s/meta", urlutil.MakeURL(node)), "application/json", bytes.NewReader(b))
+	res, err := http.Post(fmt.Sprintf(heartbeatURLFormat, urlutil.MakeURL(node)), jsonHTTPHeader, bytes.NewReader(b))
 
 	if err != nil {
 		return err
@@ -229,20 +225,20 @@ func (m *Master) sendPeers(node string, nodes []string) error {
 	return err
 }
 
-func (m *Master) removeNode(peer string) {
+func (m *Master) removeNode(node string) {
 	m.Lock()
-	if _, ok := m.nodesMap[peer]; !ok {
+	if _, ok := m.nodesMap[node]; !ok {
 		m.Unlock()
 		return
 	}
 
-	delete(m.nodesMap, peer)
+	delete(m.nodesMap, node)
 
 	if err := m.updateNodesMap(m.nodesMap); err != nil {
-		log.Println("etcd error: " + err.Error())
+		log.DB.Errorln(logPrefix, "database error:", err)
 	}
 
-	log.Println(peer, " remoted")
+	log.DB.Errorln(logPrefix, node, "remoted")
 	m.Unlock()
 }
 
@@ -251,14 +247,14 @@ func (m *Master) watchDBs() {
 
 	for {
 		resp := <-ch
-		log.Printf("WatchDBs: %v\n", string(resp.Events[0].Kv.Value))
+		log.DB.Infoln(logPrefix, "watchDBs:", string(resp.Events[0].Kv.Value))
 		if resp.Canceled {
 			ch = m.store.Watch(context.TODO(), master.StoreKey)
 			continue
 		}
 
 		if err := resp.Err(); err != nil {
-			log.Println("failed to watch dbs, err: ", err.Error())
+			log.DB.Infoln(logPrefix, "failed to watch dbs, err: ", err)
 		}
 
 		for _, event := range resp.Events {

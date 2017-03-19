@@ -11,5 +11,5 @@ func MakeURL(addr string) string {
 		return fmt.Sprintf("http://localhost%s", addr)
 	}
 
-	return addr
+	return strings.TrimSuffix(addr, "/")
 }

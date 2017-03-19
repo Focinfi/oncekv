@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-
 	"time"
 
 	"github.com/Focinfi/oncekv/log"
@@ -20,52 +19,74 @@ import (
 	"github.com/golang/groupcache"
 )
 
-const basePath = "/sqs/"
-const defaultGroup = "message"
+const (
+	jsonHTTPHeader      = "application-type/json"
+	basePath            = "/sqs/"
+	defaultGroup        = "message"
+	masterJoinURLFormat = "%s/join"
+	dbGetURLFormat      = "%s/i/key/%s"
+	dbQueryTimeout      = time.Millisecond * 300
+)
 
-var ErrDataNotFound = errors.New("groupcache: data not found")
-
-type getter interface {
-	Get(key string) string
-}
-
-// Node for one groupcahe server
-type Node struct {
-	sync.RWMutex
-	httpAddr string
-	nodeAddr string
-	master   string
-	dbs      []string
-	peers    []string
-	pool     *groupcache.HTTPPool
-	group    *groupcache.Group
-	*gin.Engine
-}
+var (
+	// ErrDataNotFound for not found data error
+	ErrDataNotFound = errors.New("groupcache node: data not found")
+	// ErrDatabaseQueryTimeout for upderlying data query timeout error
+	ErrDatabaseQueryTimeout = errors.New("gropcache node: upderlying data query timeout")
+)
 
 type masterParam struct {
 	Peers []string `json:"peers"`
 	DBs   []string `json:"dbs"`
 }
 
-// New returns a new Node with the addr
+// Node for one groupcahe server
+type Node struct {
+	// meta
+	sync.RWMutex // protect updating for dbs and peers
+	// upderlying databse
+	dbs []string
+	// cache peers
+	peers []string
+	// master url for update meta(dbs and peers)
+	masterAdrr string
+
+	// node http server
+	*gin.Engine
+	httpAddr string
+
+	// groupcache server
+	nodeAddr string
+	pool     *groupcache.HTTPPool
+	group    *groupcache.Group
+}
+
+// New returns a new Node with the given info
 func New(httpAddr string, nodeAddr string, masterAddr string) *Node {
 	cache := &Node{
-		master:   strings.TrimSuffix(masterAddr, "/"),
-		httpAddr: httpAddr,
-		nodeAddr: nodeAddr,
+		masterAdrr: strings.TrimSuffix(masterAddr, "/"),
+		httpAddr:   httpAddr,
+		nodeAddr:   nodeAddr,
 	}
 
 	cache.Engine = newServer(cache)
 	cache.pool = newPool(cache, nodeAddr)
-	cache.group = newGroup(cache, "message")
+	cache.group = newGroup(cache, defaultGroup)
 
 	return cache
 }
 
 // Start starts the server
 func (n *Node) Start() {
+	// try to get meta data
 	n.join()
-	go http.ListenAndServe(n.nodeAddr, n.pool)
+
+	// start the groupcache server
+	go func() {
+		log.DB.Fatal(http.ListenAndServe(n.nodeAddr, n.pool))
+	}()
+
+	// start the node server
 	n.Run(n.httpAddr)
 }
 
@@ -92,6 +113,20 @@ func newServer(c *Node) *gin.Engine {
 	return server
 }
 
+func newPool(node *Node, addr string) *groupcache.HTTPPool {
+	pool := groupcache.NewHTTPPoolOpts(urlutil.MakeURL(addr),
+		&groupcache.HTTPPoolOptions{
+			BasePath: basePath,
+		})
+
+	return pool
+}
+
+func newGroup(n *Node, name string) *groupcache.Group {
+	// TODO: make cacheBizes to be configurable
+	return groupcache.NewGroup(name, 1<<32, groupcache.GetterFunc(n.fetchData))
+}
+
 func (n *Node) join() {
 	// build join param
 	b, err := json.Marshal(map[string]string{
@@ -103,14 +138,14 @@ func (n *Node) join() {
 	}
 
 	// post join
-	res, err := http.Post(fmt.Sprintf("%s/join", n.master), "application-type/json", bytes.NewReader(b))
+	res, err := http.Post(fmt.Sprintf(masterJoinURLFormat, n.masterAdrr), jsonHTTPHeader, bytes.NewReader(b))
 	if err != nil {
 		panic(err)
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		panic("failed to join")
+		panic("groupcache node: failed to join into master")
 	}
 
 	defer res.Body.Close()
@@ -129,7 +164,7 @@ func (n *Node) join() {
 	n.Lock()
 	defer n.Unlock()
 
-	// update peers
+	// update meta
 	n.pool.Set(params.Peers...)
 	n.peers = params.Peers
 	n.dbs = params.DBs
@@ -138,7 +173,7 @@ func (n *Node) join() {
 func (n *Node) handleMeta(ctx *gin.Context) {
 	params := masterParam{}
 	if err := ctx.BindJSON(&params); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -148,14 +183,17 @@ func (n *Node) handleMeta(ctx *gin.Context) {
 	n.RLock()
 	if reflect.DeepEqual(n.peers, params.Peers) &&
 		reflect.DeepEqual(n.dbs, params.DBs) {
+
 		n.RUnlock()
+		// return if no changes
 		ctx.JSON(http.StatusOK, nil)
 		return
 	}
 	n.RUnlock()
 
-	fmt.Printf("%#v, %#v\n", n.peers, params.Peers)
-	fmt.Printf("%#v, %#v\n", n.dbs, params.DBs)
+	log.Biz.Infof("%#v, %#v\n", n.peers, params.Peers)
+	log.Biz.Infof("%#v, %#v\n", n.dbs, params.DBs)
+
 	n.Lock()
 	defer n.Unlock()
 
@@ -170,7 +208,8 @@ func (n *Node) fetchData(ctx groupcache.Context, key string, dest groupcache.Sin
 	var dbs = make([]string, len(n.dbs))
 	copy(dbs, n.dbs)
 	if len(dbs) == 0 {
-		return errors.New("no database")
+		log.DB.Errorln("groupcache node: no database")
+		return ErrDatabaseQueryTimeout
 	}
 
 	var data = make(chan []byte)
@@ -178,51 +217,48 @@ func (n *Node) fetchData(ctx groupcache.Context, key string, dest groupcache.Sin
 	var completedCount int
 
 	for _, db := range dbs {
-		url := competeAddr(db)
+		url := urlutil.MakeURL(db)
 		go func() {
-			url = fmt.Sprintf("%s/i/key/%s", strings.TrimSuffix(url, "/"), key)
-			fmt.Println("URL: ", url)
-			res, err := http.Get(url)
+			url = fmt.Sprintf(dbGetURLFormat, url, key)
+			resp, err := http.Get(url)
 			var val []byte
 			var statusCode int
+
 			if err != nil {
-				log.DB.Println("fetchData err: ", err)
+				log.DB.Errorf("fetchData err: %s\n", err)
 			} else {
-				val, err = ioutil.ReadAll(res.Body)
-				statusCode = res.StatusCode
-				res.Body.Close()
+				// read the res.Body only if err == nil
+				defer resp.Body.Close()
+
+				data, err := ioutil.ReadAll(resp.Body)
+				if err != nil {
+					log.DB.Info(err)
+				}
+
+				statusCode = resp.StatusCode
+				if statusCode == http.StatusOK {
+					val = data
+				}
 			}
 
 			n.Lock()
 			defer n.Unlock()
 
 			completedCount++
-			if completedCount == len(dbs) {
-				if statusCode == http.StatusOK {
-					go func() { data <- val }()
-					return
-				}
-
-				go func() { data <- nil }()
-				return
-			}
-
-			if res.StatusCode == http.StatusOK {
+			if statusCode == http.StatusOK || completedCount == len(dbs) {
 				if !done {
-					done = true
 					go func() { data <- val }()
+					done = true
 				}
 			}
-
 		}()
 	}
 
 	select {
-	case <-time.After(time.Millisecond * 300):
-		fmt.Println("timeout")
-		return errors.New("timeout")
+	case <-time.After(dbQueryTimeout):
+		return ErrDatabaseQueryTimeout
 	case val := <-data:
-		fmt.Printf("Val: '%s'", string(val))
+		log.Biz.Debugf("Val: '%s'\n", string(val))
 		if len(val) > 0 {
 			dest.SetString(string(val))
 			return nil
@@ -230,18 +266,4 @@ func (n *Node) fetchData(ctx groupcache.Context, key string, dest groupcache.Sin
 
 		return ErrDataNotFound
 	}
-}
-
-func newPool(node *Node, addr string) *groupcache.HTTPPool {
-	pool := groupcache.NewHTTPPoolOpts(urlutil.MakeURL(addr),
-		&groupcache.HTTPPoolOptions{
-			BasePath: basePath,
-		})
-
-	return pool
-}
-
-func newGroup(n *Node, name string) *groupcache.Group {
-	// TODO: make cacheBizes to be configurable
-	return groupcache.NewGroup(name, 1<<32, groupcache.GetterFunc(n.fetchData))
 }

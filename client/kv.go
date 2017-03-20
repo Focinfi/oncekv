@@ -29,9 +29,34 @@ var (
 	ErrTimeout = fmt.Errorf("%s timeout", logPrefix)
 )
 
+type httpGetter interface {
+	Get(url string) (resp *http.Response, err error)
+}
+
+type httpGetterFunc func(url string) (resp *http.Response, err error)
+
+func (f httpGetterFunc) Get(url string) (resp *http.Response, err error) {
+	return f(url)
+}
+
+type httpPoster interface {
+	Post(url string, contentType string, body io.Reader) (resp *http.Response, err error)
+}
+
+type httpPosterFunc func(url string, contentType string, body io.Reader) (resp *http.Response, err error)
+
+func (f httpPosterFunc) Post(url string, contentType string, body io.Reader) (resp *http.Response, err error) {
+	return f(url, contentType, body)
+}
+
+var defaultGetter = httpGetterFunc(http.Get)
+var defaultPoster = httpPosterFunc(http.Post)
+
 // KV for kv storage
 type KV struct {
-	cli *Client
+	cli    *Client
+	getter httpGetter
+	poster httpPoster
 }
 
 type kvParams struct {
@@ -209,7 +234,7 @@ func (kv *KV) put(key string, value string, url string) error {
 		return err
 	}
 
-	res, err := http.Post(fmt.Sprintf(dbPutURLFormat, urlutil.MakeURL(url)), "application-type/json", bytes.NewReader(b))
+	res, err := defaultPoster.Post(fmt.Sprintf(dbPutURLFormat, urlutil.MakeURL(url)), "application-type/json", bytes.NewReader(b))
 	if err != nil {
 		return err
 	}
@@ -252,7 +277,7 @@ func (kv *KV) find(key string, url string, timeout time.Duration) (value string,
 	errChan := make(chan error)
 
 	go func() {
-		res, err := http.Get(fmt.Sprintf("%s/key/%s", urlutil.MakeURL(url), key))
+		res, err := defaultGetter.Get(fmt.Sprintf("%s/key/%s", urlutil.MakeURL(url), key))
 		if err != nil {
 			errChan <- err
 			return

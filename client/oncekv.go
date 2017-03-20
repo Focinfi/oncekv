@@ -12,8 +12,23 @@ import (
 	oncekv "github.com/Focinfi/oncekv/master"
 )
 
+type cluster interface {
+	Peers() ([]string, error)
+}
+
+type clusterFunc func() ([]string, error)
+
+func (c clusterFunc) Peers() ([]string, error) {
+	return c()
+}
+
+var dbCluster = cluster(oncekv.Default)
+
+var cacheCluster = cluster(clusterFunc(groupcache.Peers))
+
 // Client for requesting oncekv
 type Client struct {
+	// meta
 	sync.RWMutex
 	dbs    []string
 	caches []string
@@ -21,6 +36,10 @@ type Client struct {
 	fastCache string
 	// last fast enough database server URL
 	fastDB string
+
+	// meta server
+	cacheCluster cluster
+	dbCluster    cluster
 }
 
 // New returns a new Client and ready to use
@@ -66,13 +85,13 @@ func (c *Client) refresh() {
 }
 
 func (c *Client) update() error {
-	dbs, err := oncekv.Default.Peers()
+	dbs, err := dbCluster.Peers()
 	if err != nil {
 		return err
 	}
 	sort.StringSlice(dbs).Sort()
 
-	caches, err := groupcache.Peers()
+	caches, err := cacheCluster.Peers()
 	if err != nil {
 		return err
 	}

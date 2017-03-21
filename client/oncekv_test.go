@@ -14,12 +14,20 @@ func mockCluster(addrs []string, err error) cluster {
 	})
 }
 
-var caches = []string{"cache1.loc", "cache2.loc"}
-var dbs = []string{"db1.loc", "db2.loc"}
+var caches = []string{"http://cache1.loc", "http://cache2.loc"}
+var dbs = []string{"http://db1.loc", "http://db2.loc"}
 
-func TestNew(t *testing.T) {
+func setDefaultMockCacheAndDB() {
+	mockCacheAndDB(caches, dbs)
+}
+
+func mockCacheAndDB(caches []string, dbs []string) {
 	cacheCluster = mockCluster(caches, nil)
 	dbCluster = mockCluster(dbs, nil)
+}
+
+func TestNew(t *testing.T) {
+	setDefaultMockCacheAndDB()
 
 	client, err := New()
 	if err != nil {
@@ -35,23 +43,20 @@ func TestNew(t *testing.T) {
 	}
 
 	// test refresh
-	done := make(chan bool)
-	go func() {
-		caches = []string{"cache2.loc", "cache3.loc"}
-		dbs = []string{"db2.loc", "db3.loc"}
-		cacheCluster = mockCluster(caches, nil)
-		dbCluster = mockCluster(dbs, nil)
-		time.AfterFunc(config.Config().OncekvMetaRefreshPeroid*2, func() {
-			done <- true
-		})
-	}()
-	<-done
+	newCaches := []string{"cache2.loc", "cache3.loc"}
+	newDBs := []string{"db2.loc", "db3.loc"}
+	mockCacheAndDB(newCaches, newDBs)
 
-	if !reflect.DeepEqual(client.caches, caches) {
+	// wait
+	select {
+	case <-time.After(config.Config().OncekvMetaRefreshPeroid * 2):
+	}
+
+	if !reflect.DeepEqual(client.caches, newCaches) {
 		t.Errorf("failed to set caches, expect %v, got %v", caches, client.caches)
 	}
 
-	if !reflect.DeepEqual(client.dbs, dbs) {
+	if !reflect.DeepEqual(client.dbs, newDBs) {
 		t.Errorf("failed to set dbs, expect %v, got %v", dbs, client.dbs)
 	}
 }

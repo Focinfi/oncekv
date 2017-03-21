@@ -169,6 +169,10 @@ func (kv *KV) get(key string) (string, error) {
 	}
 
 	val, duration, err := kv.find(key, kv.cli.fastDB, requestTimeout)
+	if err == ErrDataNotFound {
+		return "", err
+	}
+
 	if err != nil {
 		log.DB.Error(logPrefix, err)
 		return kv.tryAllDBfind(key)
@@ -194,6 +198,7 @@ func (kv *KV) tryAllDBfind(key string) (string, error) {
 	var data = make(chan string)
 	var completeCount int
 	var fastURL string
+	var resErr error
 
 	for i, db := range dbs {
 		go func(index int, url string) {
@@ -204,10 +209,11 @@ func (kv *KV) tryAllDBfind(key string) (string, error) {
 
 			mux.Lock()
 			defer mux.Unlock()
-			if val != "" || completeCount == len(dbs) {
+			if val != "" || err == ErrDataNotFound || completeCount == len(dbs) {
 				if !got {
 					got = true
 					fastURL = url
+					resErr = err
 
 					go func() { data <- val }()
 				}
@@ -226,11 +232,7 @@ func (kv *KV) tryAllDBfind(key string) (string, error) {
 			go kv.cli.setFastDB(fastURL)
 		}
 
-		if value != "" {
-			return value, nil
-		}
-
-		return "", ErrDataNotFound
+		return value, resErr
 	}
 }
 
@@ -392,6 +394,7 @@ func (kv *KV) tryAllCaches(key string) (string, error) {
 	var fastURL string
 	var minDuration = requestTimeout
 	var completed = make(chan bool)
+	var resErr error
 
 	for i, cache := range caches {
 		go func(index int, url string) {
@@ -417,14 +420,16 @@ func (kv *KV) tryAllCaches(key string) (string, error) {
 
 				if !fetched {
 					fetched = true
+					resErr = err
 					go func() { data <- val }()
 				}
 				return
 			}
 
-			if val != "" {
+			if val != "" || err == ErrDataNotFound {
 				if !fetched {
 					fetched = true
+					resErr = err
 					go func() { data <- val }()
 				}
 			}
@@ -444,10 +449,6 @@ func (kv *KV) tryAllCaches(key string) (string, error) {
 
 	case value := <-data:
 		log.Biz.Println(logPrefix, "end tryAllCaches:", time.Now())
-		if value != "" {
-			return value, nil
-		}
-
-		return "", ErrDataNotFound
+		return value, resErr
 	}
 }

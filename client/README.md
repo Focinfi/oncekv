@@ -8,7 +8,5 @@ A HTTP Client for oncekv.
 3. Clean API.
 
 #### TODO
-1. Add Option for client.New
-  1. request timeout
-  2. ideal response duration
-  3. cache and database master
+1. Does the master of cache and database should be configured?
+2. Need support Delete() currently? 

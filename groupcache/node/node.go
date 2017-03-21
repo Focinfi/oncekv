@@ -108,8 +108,9 @@ func newServer(c *Node) *gin.Engine {
 			return
 		}
 
-		ctx.Writer.Write(result.ByteSlice())
 		ctx.Writer.WriteHeader(http.StatusOK)
+		ctx.Writer.Header()["Content-Type"] = []string{"application/json; charset=utf-8"}
+		ctx.Writer.Write(result.ByteSlice())
 	})
 	return server
 }

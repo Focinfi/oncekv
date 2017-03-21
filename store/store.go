@@ -18,8 +18,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Focinfi/oncekv/raft"
 	"github.com/Focinfi/oncekv/raftboltdb"
+	"github.com/hashicorp/raft"
 )
 
 const (
@@ -41,7 +41,8 @@ type Store struct {
 	mu sync.Mutex
 	m  map[string]string // The key-value store for the system.
 
-	raft *raft.Raft // The consensus mechanism
+	raft      *raft.Raft // The consensus mechanism
+	peerStore *raft.JSONPeers
 
 	logger *log.Logger
 }
@@ -105,6 +106,7 @@ func (s *Store) Open(enableSingle bool) error {
 		return fmt.Errorf("new raft: %s", err)
 	}
 	s.raft = ra
+	s.peerStore = peerStore
 	return nil
 }
 
@@ -169,7 +171,7 @@ func (s *Store) Join(addr string) error {
 
 // Peers returns the raft peers
 func (s *Store) Peers() ([]string, error) {
-	return s.raft.Peers()
+	return s.peerStore.Peers()
 }
 
 type fsm Store

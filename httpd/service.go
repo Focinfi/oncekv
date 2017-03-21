@@ -18,11 +18,8 @@ type Store interface {
 	// Get returns the value for the given key.
 	Get(key string) (string, error)
 
-	// Set sets the value for the given key, via distributed consensus.
-	Set(key, value string) error
-
-	// Delete removes the given key, via distributed consensus.
-	Delete(key string) error
+	// Add adds key/value, via distributed consensus.
+	Add(key, value string) error
 
 	// Join joins the node, reachable at addr, to the cluster.
 	Join(addr string) error
@@ -124,7 +121,7 @@ func (s *Service) handleSet(ctx *gin.Context) {
 		return
 	}
 
-	err := s.store.Set(params.Key, params.Value)
+	err := s.store.Add(params.Key, params.Value)
 	if err == raftboltdb.ErrKeyDuplicated {
 		ctx.JSON(http.StatusOK, StatusKeyDuplicate)
 		return

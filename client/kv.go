@@ -139,12 +139,6 @@ func (kv *KV) Put(key string, value string) error {
 	return nil
 }
 
-// Delete delete the key
-func (kv *KV) Delete(key string) error {
-	// TODO: remove old key for save db space
-	return nil
-}
-
 func (kv *KV) cache(key string) (string, error) {
 	url := kv.cli.fastCache
 	if url == "" {
@@ -223,12 +217,13 @@ func (kv *KV) tryAllDBfind(key string) (string, error) {
 
 	select {
 	case <-time.After(requestTimeout):
+		go kv.cli.setFastDB("")
 		return "", ErrTimeout
 
 	case value := <-data:
 		log.Biz.Infoln(logPrefix, "end get:", time.Now())
 
-		if fastURL != "" {
+		if value != "" || resErr == ErrDataNotFound {
 			go kv.cli.setFastDB(fastURL)
 		}
 
@@ -276,11 +271,12 @@ func (kv *KV) tryAllDBSet(key string, value string) error {
 
 	select {
 	case <-time.After(requestTimeout):
+		go func() { kv.cli.setFastDB("") }()
 		return ErrTimeout
 	case res := <-result:
 		log.Biz.Infoln(logPrefix, "end tryAllDBSet:", time.Now())
 
-		if fastURL != "" {
+		if res == nil {
 			go kv.cli.setFastDB(fastURL)
 		}
 
@@ -303,7 +299,7 @@ func (kv *KV) set(key string, value string, url string) (time.Duration, error) {
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return requestTimeout, fmt.Errorf("%s failed to set kv, key: %s, value: %v\n", logPrefix, key, value)
+		return requestTimeout, fmt.Errorf("%s failed to set kv(url: %s), key: %s, value: %v\n", logPrefix, url, key, value)
 	}
 
 	return time.Now().Sub(begin), nil

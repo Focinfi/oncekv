@@ -122,6 +122,26 @@ func (s *Store) Set(key, value string) error {
 	}
 
 	c := &command{
+		Op:    "set",
+		Key:   key,
+		Value: value,
+	}
+	b, err := json.Marshal(c)
+	if err != nil {
+		return err
+	}
+
+	f := s.raft.Apply(b, raftTimeout)
+	return f.Error()
+}
+
+// Add adds the key/value, if the key has been added, do nothing.
+func (s *Store) Add(key, value string) error {
+	if s.raft.State() != raft.Leader {
+		return fmt.Errorf("not leader")
+	}
+
+	c := &command{
 		Op:    "add",
 		Key:   key,
 		Value: value,

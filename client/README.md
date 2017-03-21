@@ -9,4 +9,3 @@ A HTTP Client for oncekv.
 
 #### TODO
 1. Does the master of cache and database should be configured?
-2. Need support Delete() currently? 

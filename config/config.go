@@ -51,8 +51,10 @@ type Configuration struct {
 	LogOut                  io.Writer
 	EtcdEndpoints           []string
 	OncekvMetaRefreshPeroid time.Duration
-	ClientRequestTimeout    time.Duration
+	HTTPRequestTimeout      time.Duration
 	IdealResponseDuration   time.Duration
+	CacheBytes              int64
+	CacheMasterAddr         string
 }
 
 func newDefaultConfig() Configuration {
@@ -60,8 +62,10 @@ func newDefaultConfig() Configuration {
 		LogOut:                  os.Stdout,
 		EtcdEndpoints:           []string{"localhost:2379"},
 		OncekvMetaRefreshPeroid: time.Second,
-		ClientRequestTimeout:    time.Millisecond * 100,
+		HTTPRequestTimeout:      time.Millisecond * 100,
 		IdealResponseDuration:   time.Millisecond * 50,
+		CacheBytes:              1 << 20,
+		CacheMasterAddr:         ":5550",
 	}
 }
 
@@ -73,8 +77,10 @@ func Config() Configuration {
 		return Configuration{
 			LogOut:                  os.Stdout,
 			OncekvMetaRefreshPeroid: time.Second,
-			ClientRequestTimeout:    time.Millisecond * 100,
+			HTTPRequestTimeout:      time.Millisecond * 100,
 			IdealResponseDuration:   time.Millisecond * 50,
+			CacheBytes:              1 << 32,
+			CacheMasterAddr:         ":5550",
 		}
 	case developEnv:
 		return newDefaultConfig()

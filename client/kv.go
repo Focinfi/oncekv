@@ -12,6 +12,7 @@ import (
 
 	"github.com/Focinfi/oncekv/config"
 	"github.com/Focinfi/oncekv/log"
+	"github.com/Focinfi/oncekv/utils/mock"
 	"github.com/Focinfi/oncekv/utils/urlutil"
 )
 
@@ -22,7 +23,7 @@ const (
 )
 
 var (
-	requestTimeout       = config.Config().ClientRequestTimeout
+	requestTimeout       = config.Config().HTTPRequestTimeout
 	idealReponseDuration = config.Config().IdealResponseDuration
 	// ErrDataNotFound for data not found response
 	ErrDataNotFound = fmt.Errorf("%s data not found", logPrefix)
@@ -31,28 +32,8 @@ var (
 	ErrTimeout = fmt.Errorf("%s timeout", logPrefix)
 )
 
-type httpGetter interface {
-	Get(url string) (resp *http.Response, err error)
-}
-
-type httpGetterFunc func(url string) (resp *http.Response, err error)
-
-func (f httpGetterFunc) Get(url string) (resp *http.Response, err error) {
-	return f(url)
-}
-
-type httpPoster interface {
-	Post(url string, contentType string, body io.Reader) (resp *http.Response, err error)
-}
-
-type httpPosterFunc func(url string, contentType string, body io.Reader) (resp *http.Response, err error)
-
-func (f httpPosterFunc) Post(url string, contentType string, body io.Reader) (resp *http.Response, err error) {
-	return f(url, contentType, body)
-}
-
-var defaultGetter = httpGetter(httpGetterFunc(http.Get))
-var defaultPoster = httpPoster(httpPosterFunc(http.Post))
+var defaultGetter = mock.HTTPGetter(mock.HTTPGetterFunc(http.Get))
+var defaultPoster = mock.HTTPPoster(mock.HTTPPosterFunc(http.Post))
 
 // Option for Client option
 type Option struct {

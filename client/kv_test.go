@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Focinfi/oncekv/utils/mock"
 )
 
 func hostOfURL(rawurl string) string {
@@ -20,8 +22,8 @@ func hostOfURL(rawurl string) string {
 	return u.Host
 }
 
-func httpGetterCluster(getterMap map[string]httpGetter) httpGetter {
-	return httpGetterFunc(func(rawurl string) (*http.Response, error) {
+func httpGetterCluster(getterMap map[string]mock.HTTPGetter) mock.HTTPGetter {
+	return mock.HTTPGetterFunc(func(rawurl string) (*http.Response, error) {
 		host := hostOfURL(rawurl)
 		getter, ok := getterMap[host]
 		if !ok {
@@ -32,8 +34,8 @@ func httpGetterCluster(getterMap map[string]httpGetter) httpGetter {
 	})
 }
 
-func mockHTTPGetter(url string, response string, err error, delay time.Duration) httpGetter {
-	return httpGetterFunc(func(url string) (*http.Response, error) {
+func mockHTTPGetter(url string, response string, err error, delay time.Duration) mock.HTTPGetter {
+	return mock.HTTPGetterFunc(func(url string) (*http.Response, error) {
 		respChan := make(chan *http.Response)
 
 		go func() {
@@ -51,8 +53,8 @@ func mockHTTPGetter(url string, response string, err error, delay time.Duration)
 	})
 }
 
-func httpPosterCluster(posterMap map[string]httpPoster) httpPoster {
-	return httpPosterFunc(func(rawurl string, contentType string, body io.Reader) (*http.Response, error) {
+func httpPosterCluster(posterMap map[string]mock.HTTPPoster) mock.HTTPPoster {
+	return mock.HTTPPosterFunc(func(rawurl string, contentType string, body io.Reader) (*http.Response, error) {
 		host := hostOfURL(rawurl)
 		poster, ok := posterMap[host]
 		if !ok {
@@ -63,8 +65,8 @@ func httpPosterCluster(posterMap map[string]httpPoster) httpPoster {
 	})
 }
 
-func mockHTTPPoster(url string, response string, err error, delay time.Duration) httpPoster {
-	return httpPosterFunc(func(url string, contentType string, body io.Reader) (*http.Response, error) {
+func mockHTTPPoster(url string, response string, err error, delay time.Duration) mock.HTTPPoster {
+	return mock.HTTPPosterFunc(func(url string, contentType string, body io.Reader) (*http.Response, error) {
 		respChan := make(chan *http.Response)
 
 		go func() {
@@ -82,8 +84,8 @@ func mockHTTPPoster(url string, response string, err error, delay time.Duration)
 	})
 }
 
-func defaultGetterCluster() httpGetter {
-	cluster := map[string]httpGetter{}
+func defaultGetterCluster() mock.HTTPGetter {
+	cluster := map[string]mock.HTTPGetter{}
 
 	var servers []string
 	servers = append(servers, caches...)
@@ -100,8 +102,8 @@ func defaultGetterCluster() httpGetter {
 	return httpGetterCluster(cluster)
 }
 
-func defaultPosterCluster() httpPoster {
-	cluster := map[string]httpPoster{}
+func defaultPosterCluster() mock.HTTPPoster {
+	cluster := map[string]mock.HTTPPoster{}
 	for i, db := range dbs {
 		delay := idealReponseDuration * time.Duration(i%2)
 		fmt.Printf("%s delay=%v\n", db, delay)

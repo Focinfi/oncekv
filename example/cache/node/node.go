@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/Focinfi/oncekv/groupcache/node"
+	"github.com/Focinfi/oncekv/cache/node"
 	"github.com/urfave/cli"
 )
 

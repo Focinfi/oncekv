@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Focinfi/oncekv/config"
 	"github.com/Focinfi/oncekv/log"
 	"github.com/Focinfi/oncekv/master"
 	"github.com/Focinfi/oncekv/utils/urlutil"
@@ -20,12 +21,13 @@ import (
 const (
 	defaultHeartbeatPeriod = time.Second * 1
 	defaultKey             = "oncekv.groupcache.master"
-	defaultEtcdEndpoint    = "localhost:2379"
-	defaultAddr            = ":5550"
 	jsonHTTPHeader         = "application/json"
 	heartbeatURLFormat     = "%s/meta"
-	logPrefix              = "groupcache/master"
+	logPrefix              = "onckv cache/master:"
 )
+
+var etcdEndpoints = config.Config().EtcdEndpoints
+var defaultAddr = config.Config().CacheMasterAddr
 
 // nodesMap is pairs of httpAddr/nodeAddr
 type nodesMap map[string]string
@@ -77,7 +79,7 @@ type Master struct {
 func New(addr string) *Master {
 	store, err := clientv3.New(
 		clientv3.Config{
-			Endpoints: []string{defaultEtcdEndpoint},
+			Endpoints: etcdEndpoints,
 		},
 	)
 

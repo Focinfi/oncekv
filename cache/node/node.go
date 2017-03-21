@@ -13,7 +13,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Focinfi/oncekv/config"
 	"github.com/Focinfi/oncekv/log"
+	"github.com/Focinfi/oncekv/utils/mock"
 	"github.com/Focinfi/sqs/util/urlutil"
 	"github.com/gin-gonic/gin"
 	"github.com/golang/groupcache"
@@ -21,12 +23,11 @@ import (
 
 const (
 	jsonHTTPHeader      = "application-type/json"
-	basePath            = "/sqs/"
-	defaultGroup        = "message"
+	basePath            = "/oncekv/"
+	defaultGroup        = "kv"
 	masterJoinURLFormat = "%s/join"
 	dbGetURLFormat      = "%s/i/key/%s"
-	dbQueryTimeout      = time.Millisecond * 300
-	gorupCacheBytes     = 1 << 32
+	logPrefix           = "oncekv/cachenode:"
 )
 
 var (
@@ -34,6 +35,11 @@ var (
 	ErrDataNotFound = errors.New("groupcache node: data not found")
 	// ErrDatabaseQueryTimeout for upderlying data query timeout error
 	ErrDatabaseQueryTimeout = errors.New("gropcache node: upderlying data query timeout")
+
+	dbQueryTimeout  = config.Config().HTTPRequestTimeout
+	gorupCacheBytes = config.Config().CacheBytes
+
+	httpGetter = mock.HTTPGetter(mock.HTTPGetterFunc(http.Get))
 )
 
 type masterParam struct {
@@ -84,7 +90,7 @@ func (n *Node) Start() {
 
 	// start the groupcache server
 	go func() {
-		log.DB.Fatal(http.ListenAndServe(n.nodeAddr, n.pool))
+		log.DB.Fatal(logPrefix, http.ListenAndServe(n.nodeAddr, n.pool))
 	}()
 
 	// start the node server
@@ -103,7 +109,7 @@ func newServer(c *Node) *gin.Engine {
 		}
 
 		if err != nil {
-			log.DB.Error(err)
+			log.DB.Error(logPrefix, err)
 			ctx.JSON(http.StatusInternalServerError, nil)
 			return
 		}
@@ -145,7 +151,7 @@ func (n *Node) join() {
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		panic("groupcache node: failed to join into master")
+		panic(fmt.Sprintf("%s failed to join into master", logPrefix))
 	}
 
 	defer res.Body.Close()
@@ -191,8 +197,8 @@ func (n *Node) handleMeta(ctx *gin.Context) {
 	}
 	n.RUnlock()
 
-	log.Biz.Infof("%#v, %#v\n", n.peers, params.Peers)
-	log.Biz.Infof("%#v, %#v\n", n.dbs, params.DBs)
+	log.Biz.Infof("%s [peers] local:%#v, remote: %#v\n", logPrefix, n.peers, params.Peers)
+	log.Biz.Infof("%s [dbs] local:%#v, remote: %#v\n", logPrefix, n.dbs, params.DBs)
 
 	n.Lock()
 	defer n.Unlock()
@@ -208,7 +214,7 @@ func (n *Node) fetchData(ctx groupcache.Context, key string, dest groupcache.Sin
 	var dbs = make([]string, len(n.dbs))
 	copy(dbs, n.dbs)
 	if len(dbs) == 0 {
-		log.DB.Errorln("groupcache node: no database")
+		log.DB.Errorln(logPrefix, "no database")
 		return ErrDatabaseQueryTimeout
 	}
 
@@ -220,19 +226,19 @@ func (n *Node) fetchData(ctx groupcache.Context, key string, dest groupcache.Sin
 		url := urlutil.MakeURL(db)
 		go func() {
 			url = fmt.Sprintf(dbGetURLFormat, url, key)
-			resp, err := http.Get(url)
+			resp, err := httpGetter.Get(url)
 			var val []byte
 			var statusCode int
 
 			if err != nil {
-				log.DB.Errorf("fetchData err: %s\n", err)
+				log.DB.Errorln(logPrefix, "fetchData err:", err)
 			} else {
 				// read the res.Body only if err == nil
 				defer resp.Body.Close()
 
 				data, err := ioutil.ReadAll(resp.Body)
 				if err != nil {
-					log.DB.Info(err)
+					log.DB.Infoln(logPrefix, url, err)
 				}
 
 				statusCode = resp.StatusCode
@@ -258,7 +264,7 @@ func (n *Node) fetchData(ctx groupcache.Context, key string, dest groupcache.Sin
 	case <-time.After(dbQueryTimeout):
 		return ErrDatabaseQueryTimeout
 	case val := <-data:
-		log.Biz.Debugf("Val: '%s'\n", string(val))
+		log.Biz.Infof("%s fetchData response: '%s'\n", logPrefix, string(val))
 		if len(val) > 0 {
 			dest.SetString(string(val))
 			return nil

@@ -6,10 +6,10 @@ import (
 	"sync"
 	"time"
 
+	cachemaster "github.com/Focinfi/oncekv/cache/master"
 	"github.com/Focinfi/oncekv/config"
-	groupcache "github.com/Focinfi/oncekv/groupcache/master"
 	"github.com/Focinfi/oncekv/log"
-	oncekv "github.com/Focinfi/oncekv/master"
+	oncekvmaster "github.com/Focinfi/oncekv/master"
 )
 
 type cluster interface {
@@ -22,9 +22,9 @@ func (c clusterFunc) Peers() ([]string, error) {
 	return c()
 }
 
-var dbCluster = cluster(oncekv.Default)
+var dbCluster = cluster(oncekvmaster.Default)
 
-var cacheCluster = cluster(clusterFunc(groupcache.Peers))
+var cacheCluster = cluster(clusterFunc(cachemaster.Peers))
 
 // Client for requesting oncekv
 type Client struct {

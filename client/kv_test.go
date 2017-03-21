@@ -9,8 +9,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/Focinfi/oncekv/config"
 )
 
 func hostOfURL(rawurl string) string {
@@ -92,7 +90,7 @@ func defaultGetterCluster() httpGetter {
 	servers = append(servers, dbs...)
 
 	for i, cache := range servers {
-		delay := config.Config().IdealKVResponseDuration * time.Duration(i%2)
+		delay := idealReponseDuration * time.Duration(i%2)
 		fmt.Printf("%s delay=%v\n", cache, delay)
 		getter := mockHTTPGetter(cache, `{"key":"foo", "value":"bar"}`, nil, delay)
 		host := hostOfURL(cache)
@@ -105,7 +103,7 @@ func defaultGetterCluster() httpGetter {
 func defaultPosterCluster() httpPoster {
 	cluster := map[string]httpPoster{}
 	for i, db := range dbs {
-		delay := config.Config().IdealKVResponseDuration * time.Duration(i%2)
+		delay := idealReponseDuration * time.Duration(i%2)
 		fmt.Printf("%s delay=%v\n", db, delay)
 		poster := mockHTTPPoster(db, "", nil, delay)
 		host := hostOfURL(db)
@@ -124,7 +122,7 @@ func TestNewKV(t *testing.T) {
 	setDefaultMockCacheAndDB()
 	setDefaultMockHTTP()
 
-	kv, err := NewKV()
+	kv, err := DefaultKV()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,18 +137,19 @@ func TestNewKV(t *testing.T) {
 }
 
 func TestCache(t *testing.T) {
+	t.Log(requestTimeout, idealReponseDuration)
 	setDefaultMockCacheAndDB()
 	setDefaultMockHTTP()
 
-	kv, _ := NewKV()
+	kv, _ := DefaultKV()
 	_, err := kv.cache("foo")
 	if err != nil {
 		t.Fatal("can not fetch data from cache, err:", err)
 	}
 
-	// wait 1s
+	// wait
 	select {
-	case <-time.After(time.Millisecond * 100):
+	case <-time.After(requestTimeout * 2):
 	}
 
 	if kv.cli.fastCache != caches[0] {
@@ -178,7 +177,7 @@ func TestGet(t *testing.T) {
 	setDefaultMockCacheAndDB()
 	setDefaultMockHTTP()
 
-	kv, _ := NewKV()
+	kv, _ := DefaultKV()
 	_, err := kv.get("foo")
 	if err != nil {
 		t.Fatal(err)
@@ -186,7 +185,7 @@ func TestGet(t *testing.T) {
 
 	//wait
 	select {
-	case <-time.After(time.Millisecond):
+	case <-time.After(requestTimeout):
 	}
 
 	if kv.cli.fastDB != dbs[0] {
@@ -214,7 +213,7 @@ func TestPut(t *testing.T) {
 	setDefaultMockCacheAndDB()
 	setDefaultMockHTTP()
 
-	kv, _ := NewKV()
+	kv, _ := DefaultKV()
 	err := kv.Put("foo1", "bar1")
 	if err != nil {
 		t.Fatal(err)

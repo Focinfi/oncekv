@@ -16,12 +16,13 @@ import (
 )
 
 const (
-	requestTimeout = time.Millisecond * 300
 	logPrefix      = "oncekv/client:"
 	dbPutURLFormat = "%s/key"
 )
 
 var (
+	requestTimeout       = config.Config().ClientRequestTimeout
+	idealReponseDuration = config.Config().IdealResponseDuration
 	// ErrDataNotFound for data not found response
 	ErrDataNotFound = fmt.Errorf("%s data not found", logPrefix)
 
@@ -52,9 +53,16 @@ func (f httpPosterFunc) Post(url string, contentType string, body io.Reader) (re
 var defaultGetter = httpGetter(httpGetterFunc(http.Get))
 var defaultPoster = httpPoster(httpPosterFunc(http.Post))
 
+// Option for Client option
+type Option struct {
+	RequestTimeout        time.Duration
+	IdealResponseDuration time.Duration
+}
+
 // KV for kv storage
 type KV struct {
-	cli *Client
+	cli    *Client
+	option *Option
 }
 
 type kvParams struct {
@@ -64,14 +72,28 @@ type kvParams struct {
 	Message string `json:"message,omitempty"`
 }
 
+// DefaultKV returns a new KV with default option
+// RequestTimeout: 100ms
+// IdealResponseDuration: 50ms
+func DefaultKV() (*KV, error) {
+	return NewKV(nil)
+}
+
 // NewKV returns a new KV
-func NewKV() (*KV, error) {
+func NewKV(option *Option) (*KV, error) {
 	cli, err := New()
 	if err != nil {
 		return nil, err
 	}
 
-	return &KV{cli: cli}, nil
+	if option == nil {
+		option = &Option{
+			RequestTimeout:        requestTimeout,
+			IdealResponseDuration: idealReponseDuration,
+		}
+	}
+
+	return &KV{cli: cli, option: option}, nil
 }
 
 // Get get the value of the key
@@ -109,7 +131,7 @@ func (kv *KV) Put(key string, value string) error {
 		return kv.tryAllDBSet(key, value)
 	}
 
-	if duration > config.Config().IdealKVResponseDuration*2 {
+	if duration > idealReponseDuration {
 		// remove fastDB
 		go func() { kv.cli.setFastDB("") }()
 	}
@@ -129,23 +151,13 @@ func (kv *KV) cache(key string) (string, error) {
 		return kv.tryAllCaches(key)
 	}
 
-	idealDuration := config.Config().IdealKVResponseDuration
-	val, duration, err := kv.find(key, url, idealDuration)
+	val, _, err := kv.find(key, url, idealReponseDuration)
+	if err == ErrDataNotFound {
+		return "", err
+	}
+
 	if err != nil {
 		return kv.tryAllCaches(key)
-	}
-
-	if val == "" {
-		return "", ErrDataNotFound
-	}
-
-	// try allCaches to update kv.cli.fastCache
-	if duration > idealDuration {
-		go func() {
-			if _, err := kv.tryAllCaches(key); err != nil {
-				log.DB.Error(logPrefix, err)
-			}
-		}()
 	}
 
 	return val, err
@@ -162,7 +174,7 @@ func (kv *KV) get(key string) (string, error) {
 		return kv.tryAllDBfind(key)
 	}
 
-	if duration > config.Config().IdealKVResponseDuration*2 {
+	if duration > idealReponseDuration {
 		go func() { kv.cli.setFastDB("") }()
 	}
 
@@ -260,10 +272,8 @@ func (kv *KV) tryAllDBSet(key string, value string) error {
 		}(i, db)
 	}
 
-	waitTime := config.Config().IdealKVResponseDuration * 6
-
 	select {
-	case <-time.After(waitTime):
+	case <-time.After(requestTimeout):
 		return ErrTimeout
 	case res := <-result:
 		log.Biz.Infoln(logPrefix, "end tryAllDBSet:", time.Now())
@@ -337,7 +347,7 @@ func (kv *KV) find(key string, url string, timeout time.Duration) (value string,
 	}()
 
 	select {
-	case <-time.After(requestTimeout):
+	case <-time.After(timeout):
 		return "", requestTimeout, ErrTimeout
 
 	case err := <-errChan:
@@ -346,19 +356,23 @@ func (kv *KV) find(key string, url string, timeout time.Duration) (value string,
 
 	case res := <-resChan:
 		defer res.Body.Close()
+		duration = time.Now().Sub(begin)
+
+		if res.StatusCode == http.StatusNoContent {
+			return "", duration, ErrDataNotFound
+		}
 
 		if res.StatusCode == http.StatusOK {
 			val, err := kv.parseData(res.Body, key)
 			if err == nil {
-				return val, time.Now().Sub(begin), nil
+				return val, duration, nil
 			}
 
 			log.Biz.Errorln(logPrefix, "find/parseData error:", err)
-
-			return "", requestTimeout, ErrDataNotFound
+			return "", requestTimeout, err
 		}
 
-		return "", requestTimeout, ErrDataNotFound
+		return "", requestTimeout, ErrTimeout
 	}
 }
 
@@ -382,8 +396,9 @@ func (kv *KV) tryAllCaches(key string) (string, error) {
 	for i, cache := range caches {
 		go func(index int, url string) {
 			val, duration, err := kv.find(key, url, requestTimeout)
+			log.DB.Infoln(logPrefix, key, url, val, duration, err)
 			if err != nil {
-				log.DB.Error(logPrefix, err)
+				log.DB.Error(err)
 			}
 
 			mux.Lock()
@@ -396,6 +411,7 @@ func (kv *KV) tryAllCaches(key string) (string, error) {
 			}
 
 			completeCount++
+			log.DB.Infoln(completeCount, len(caches))
 			if completeCount == len(caches) {
 				go func() { completed <- true }()
 

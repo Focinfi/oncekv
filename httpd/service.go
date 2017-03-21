@@ -29,6 +29,9 @@ type Store interface {
 
 	// Peers returns the store peers
 	Peers() ([]string, error)
+
+	// Leader returns the leader address
+	Leader() string
 }
 
 // Service provides HTTP service.
@@ -77,6 +80,11 @@ func (s *Service) Start() {
 }
 
 func (s *Service) handleGet(ctx *gin.Context) {
+	if s.raftAddr != s.store.Leader() {
+		ctx.JSON(http.StatusBadRequest, StatusNotLeaderError)
+		return
+	}
+
 	key := ctx.Param("key")
 	if key == "" {
 		ctx.JSON(http.StatusBadRequest, StatusParamsError)
@@ -100,6 +108,12 @@ func (s *Service) handleGet(ctx *gin.Context) {
 
 func (s *Service) handleSet(ctx *gin.Context) {
 	fmt.Println("GET key")
+
+	if s.raftAddr != s.store.Leader() {
+		ctx.JSON(http.StatusBadRequest, StatusNotLeaderError)
+		return
+	}
+
 	params := &struct {
 		Key   string `json:"key"`
 		Value string `json:"value"`

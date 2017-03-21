@@ -11,6 +11,8 @@ const (
 	KeyDuplicate = 1003
 	// InernalError for internal error
 	InernalError = 1004
+	// NotLeaderError for not leader error
+	NotLeaderError = 1005
 )
 
 // Status for response
@@ -23,6 +25,12 @@ type Status struct {
 var StatusParamsError = Status{
 	Code:    ParamsError,
 	Message: "params error",
+}
+
+// StatusNotLeaderError for params error status
+var StatusNotLeaderError = Status{
+	Code:    NotLeaderError,
+	Message: "i am not the leader",
 }
 
 // StatusKeyNotFound for key/value no found status

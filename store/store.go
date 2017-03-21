@@ -11,13 +11,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
+	"github.com/Focinfi/oncekv/log"
 	"github.com/Focinfi/oncekv/raftboltdb"
 	"github.com/hashicorp/raft"
 )
@@ -25,6 +25,7 @@ import (
 const (
 	retainSnapshotCount = 2
 	raftTimeout         = 10 * time.Second
+	logPrefix           = "oncekv/store"
 )
 
 type command struct {
@@ -43,15 +44,12 @@ type Store struct {
 
 	raft      *raft.Raft // The consensus mechanism
 	peerStore *raft.JSONPeers
-
-	logger *log.Logger
 }
 
 // New returns a new Store.
 func New() *Store {
 	return &Store{
-		m:      make(map[string]string),
-		logger: log.New(os.Stderr, "[store] ", log.LstdFlags),
+		m: make(map[string]string),
 	}
 }
 
@@ -83,7 +81,7 @@ func (s *Store) Open(enableSingle bool) error {
 	// Allow the node to entry single-mode, potentially electing itself, if
 	// explicitly enabled and there is only 1 node in the cluster already.
 	if enableSingle && len(peers) <= 1 {
-		s.logger.Println("enabling single-node mode")
+		log.DB.Infoln(logPrefix, "enabling single-node mode")
 		config.EnableSingleNode = true
 		config.DisableBootstrapAfterElect = false
 	}
@@ -159,19 +157,24 @@ func (s *Store) Delete(key string) error {
 // Join joins a node, located at addr, to this store. The node must be ready to
 // respond to Raft communications at that address.
 func (s *Store) Join(addr string) error {
-	s.logger.Printf("received join request for remote node as %s", addr)
+	log.DB.Infoln(logPrefix, "received join request for remote node as %s", addr)
 
 	f := s.raft.AddPeer(addr)
 	if f.Error() != nil {
 		return f.Error()
 	}
-	s.logger.Printf("node at %s joined successfully", addr)
+	log.DB.Infoln(logPrefix, "node at %s joined successfully", addr)
 	return nil
 }
 
 // Peers returns the raft peers
 func (s *Store) Peers() ([]string, error) {
 	return s.peerStore.Peers()
+}
+
+// Leader returns current leader of this raft cluster
+func (s *Store) Leader() string {
+	return s.raft.Leader()
 }
 
 type fsm Store

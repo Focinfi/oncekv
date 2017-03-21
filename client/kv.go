@@ -17,6 +17,7 @@ import (
 
 const (
 	logPrefix      = "oncekv/client:"
+	dbGetURLFormat = "%s/key/%s"
 	dbPutURLFormat = "%s/key"
 )
 
@@ -335,7 +336,7 @@ func (kv *KV) find(key string, url string, timeout time.Duration) (value string,
 	errChan := make(chan error)
 
 	go func() {
-		res, err := defaultGetter.Get(fmt.Sprintf("%s/key/%s", urlutil.MakeURL(url), key))
+		res, err := defaultGetter.Get(fmt.Sprintf(dbGetURLFormat, urlutil.MakeURL(url), key))
 		if err != nil {
 			errChan <- err
 			return
@@ -356,7 +357,7 @@ func (kv *KV) find(key string, url string, timeout time.Duration) (value string,
 		defer res.Body.Close()
 		duration = time.Now().Sub(begin)
 
-		if res.StatusCode == http.StatusNoContent {
+		if res.StatusCode == http.StatusNotFound {
 			return "", duration, ErrDataNotFound
 		}
 

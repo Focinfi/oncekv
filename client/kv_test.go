@@ -5,11 +5,10 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
-
-	"net/url"
 
 	"github.com/Focinfi/oncekv/config"
 )

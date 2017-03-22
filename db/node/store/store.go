@@ -197,6 +197,11 @@ func (s *Store) Leader() string {
 	return s.raft.Leader()
 }
 
+// Stats return this raft status
+func (s *Store) Stats() map[string]string {
+	return s.raft.Stats()
+}
+
 type fsm Store
 
 // Apply applies a Raft log entry to the key-value store.

@@ -146,7 +146,8 @@ func (n *Node) join() {
 	}
 
 	// post join
-	res, err := http.Post(fmt.Sprintf(masterJoinURLFormat, n.masterAdrr), jsonHTTPHeader, bytes.NewReader(b))
+	addr := urlutil.MakeURL(n.masterAdrr)
+	res, err := http.Post(fmt.Sprintf(masterJoinURLFormat, addr), jsonHTTPHeader, bytes.NewReader(b))
 	if err != nil {
 		panic(err)
 	}

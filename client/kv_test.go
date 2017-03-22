@@ -149,10 +149,7 @@ func TestCache(t *testing.T) {
 		t.Fatal("can not fetch data from cache, err:", err)
 	}
 
-	// wait
-	select {
-	case <-time.After(requestTimeout * 2):
-	}
+	time.Sleep(requestTimeout * 2)
 
 	if kv.cli.fastCache != caches[0] {
 		t.Errorf("can not set the right fastCache, expect: %s, go: %v", caches[0], kv.cli.fastCache)
@@ -186,9 +183,7 @@ func TestGet(t *testing.T) {
 	}
 
 	//wait
-	select {
-	case <-time.After(requestTimeout):
-	}
+	time.Sleep(requestTimeout)
 
 	if kv.cli.fastDB != dbs[0] {
 		t.Errorf("can not set fastDB, expect %s, got %s\n", dbs[0], kv.cli.fastDB)
@@ -222,9 +217,7 @@ func TestPut(t *testing.T) {
 	}
 
 	// wait
-	select {
-	case <-time.After(time.Millisecond):
-	}
+	time.Sleep(time.Millisecond)
 
 	if kv.cli.fastDB != dbs[0] {
 		t.Errorf("can not set fastDB, expect %s, got %s\n", dbs[0], kv.cli.fastDB)

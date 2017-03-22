@@ -29,6 +29,9 @@ type Store interface {
 
 	// Leader returns the leader address
 	Leader() string
+
+	// Stats return the stats as a map[string]string
+	Stats() map[string]string
 }
 
 // Service provides HTTP service.

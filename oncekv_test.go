@@ -1,9 +1,10 @@
 package oncekv
 
 import (
+	"os"
 	"testing"
 
-	"os"
+	"time"
 
 	"github.com/Focinfi/oncekv/cache/master"
 	"github.com/Focinfi/oncekv/cache/node"
@@ -15,29 +16,34 @@ import (
 
 const testDataDir = "test_data"
 
-func BasicTest(t *testing.T) {
-	os.Mkdir(testDataDir, os.ModeAppend)
+func TestBasic(t *testing.T) {
+	os.RemoveAll(testDataDir)
+	os.Mkdir(testDataDir, 0711)
 	// clean test data
 	defer func() {
-		os.RemoveAll(testDataDir)
 	}()
 
 	// start cache master
 	go master.Default.Start()
 	// start cache node
-	go node.New(":55461", ":54461", config.Config().CacheMasterAddr)
+	go node.New(":55461", ":55462", config.Config().CacheMasterAddr).Start()
 
 	// create a single raft cluster
 	s := store.New()
 	s.RaftDir = testDataDir
-	s.RaftBind = ":55441"
-	go httpd.New(s.RaftBind, ":55441", s)
+	s.RaftBind = ":55464"
+	if err := s.Open(true); err != nil {
+		t.Fatal(err)
+	}
+	go httpd.New(":55463", s.RaftBind, s).Start()
 
 	// create client
 	cli, err := client.DefaultKV()
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	time.Sleep(time.Second * 2)
 
 	// set foo/bar
 	cli.Put("foo", "bar")
@@ -46,6 +52,8 @@ func BasicTest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	time.Sleep(time.Second * 1)
 
 	if val != "bar" {
 		t.Errorf("oncekv: get expect bar, got %v\n", val)

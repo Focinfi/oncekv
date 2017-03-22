@@ -55,6 +55,12 @@ type Configuration struct {
 	IdealResponseDuration   time.Duration
 	CacheBytes              int64
 	CacheMasterAddr         string
+	// RaftNodesKey for raft ndoes store key
+	RaftNodesKey string
+	// CacheNodesKey for cache nodes store key
+	CacheNodesKey string
+
+	RaftKey string
 }
 
 func newDefaultConfig() Configuration {
@@ -66,6 +72,9 @@ func newDefaultConfig() Configuration {
 		IdealResponseDuration:   time.Millisecond * 50,
 		CacheBytes:              1 << 20,
 		CacheMasterAddr:         ":5550",
+		RaftNodesKey:            "oncekv.nodes",
+		CacheNodesKey:           "oncekv.cache.nodes",
+		RaftKey:                 "oncekv.nodes.http.adrr",
 	}
 }
 

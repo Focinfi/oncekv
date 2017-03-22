@@ -1,6 +1,14 @@
 package master
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/Focinfi/oncekv/config"
+)
+
+var (
+	raftNodesKey = config.Config().RaftNodesKey
+)
 
 // Master is the master of a raft group
 type Master struct {
@@ -10,7 +18,7 @@ type Master struct {
 // Peers returns the peers
 func (m *Master) Peers() ([]string, error) {
 	peers := []string{}
-	val, err := m.meta.Get(StoreKey)
+	val, err := m.meta.Get(raftNodesKey)
 	if err != nil {
 		return peers, err
 	}
@@ -29,7 +37,7 @@ func (m *Master) UpdatePeers(peers []string) error {
 		return err
 	}
 
-	return m.meta.Set(StoreKey, string(b))
+	return m.meta.Set(raftNodesKey, string(b))
 }
 
 // RegisterPeer register peer

@@ -20,14 +20,17 @@ import (
 
 const (
 	defaultHeartbeatPeriod = time.Second * 1
-	defaultKey             = "oncekv.groupcache.master"
 	jsonHTTPHeader         = "application/json"
 	heartbeatURLFormat     = "%s/meta"
-	logPrefix              = "onckv cache/master:"
+	logPrefix              = "oncekv cache/master:"
 )
 
-var etcdEndpoints = config.Config().EtcdEndpoints
-var defaultAddr = config.Config().CacheMasterAddr
+var (
+	etcdEndpoints = config.Config().EtcdEndpoints
+	defaultAddr   = config.Config().CacheMasterAddr
+	raftNodesKey  = config.Config().RaftNodesKey
+	cacheNodesKey = config.Config().CacheNodesKey
+)
 
 // nodesMap is pairs of httpAddr/nodeAddr
 type nodesMap map[string]string
@@ -92,22 +95,22 @@ func New(addr string) *Master {
 		panic(err)
 	}
 
-	master := &Master{
+	m := &Master{
 		addr:        addr,
 		store:       store,
-		nodesMapKey: defaultKey,
+		nodesMapKey: cacheNodesKey,
 	}
 
-	nodesMap, err := master.fetchNodesMap()
+	nodesMap, err := m.fetchNodesMap()
 	if err != nil {
 		panic(err)
 	}
 
 	log.Biz.Infoln(logPrefix, "Nodes: ", nodesMap)
 
-	master.nodesMap = nodesMap
-	master.server = newServer(master)
-	return master
+	m.nodesMap = nodesMap
+	m.server = newServer(m)
+	return m
 }
 
 // Start starts the master listening on addr
@@ -159,11 +162,11 @@ func (m *Master) fetchNodesMap() (nodesMap, error) {
 
 	val, err := m.store.Get(context.TODO(), m.nodesMapKey)
 	if err != nil || len(val.Kvs) == 0 {
-		return nil, err
+		return nodes, err
 	}
 
 	if err := json.Unmarshal(val.Kvs[0].Value, &nodes); err != nil {
-		return nil, err
+		return nodes, err
 	}
 
 	return nodes, nil
@@ -250,13 +253,13 @@ func (m *Master) removeNode(node string) {
 }
 
 func (m *Master) watchDBs() {
-	ch := m.store.Watch(context.TODO(), master.StoreKey)
+	ch := m.store.Watch(context.TODO(), raftNodesKey)
 
 	for {
 		resp := <-ch
 		log.DB.Infoln(logPrefix, "watchDBs:", string(resp.Events[0].Kv.Value))
 		if resp.Canceled {
-			ch = m.store.Watch(context.TODO(), master.StoreKey)
+			ch = m.store.Watch(context.TODO(), raftNodesKey)
 			continue
 		}
 
@@ -283,16 +286,4 @@ func (m *Master) syncDBs() error {
 	m.dbs = dbs
 
 	return nil
-}
-
-var defaultMaster = New(defaultAddr)
-
-// Peers returns peers of defaultKey
-func Peers() ([]string, error) {
-	peers, err := defaultMaster.fetchNodesMap()
-	if err != nil {
-		return nil, err
-	}
-
-	return peers.httpAddrs(), nil
 }

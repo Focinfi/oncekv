@@ -214,7 +214,7 @@ func (n *Node) handleMeta(ctx *gin.Context) {
 
 func (n *Node) fetchData(ctx groupcache.Context, key string, dest groupcache.Sink) error {
 	if n.fastDB == "" {
-		n.tryAllDBfind(ctx, key, dest)
+		return n.tryAllDBfind(ctx, key, dest)
 	}
 
 	data, err := n.find(key, n.fastDB)

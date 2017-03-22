@@ -2,12 +2,13 @@ package master
 
 import (
 	"fmt"
+
+	"github.com/Focinfi/oncekv/config"
 )
 
-// StoreKey for kv store key
-const StoreKey = "oncekv.nodes"
-
-const httpAddrKey = "oncekv.nodes.http.adrr"
+var (
+	httpAddrKey = config.Config().RaftKey
+)
 
 func httpAddrKeyOfRaftAddr(raftAddr string) string {
 	return fmt.Sprintf("%s.%s", httpAddrKey, raftAddr)

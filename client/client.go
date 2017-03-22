@@ -26,8 +26,8 @@ var dbCluster = cluster(oncekvmaster.Default)
 
 var cacheCluster = cluster(clusterFunc(cachemaster.Peers))
 
-// Client for requesting oncekv
-type Client struct {
+// lient for requesting oncekv
+type client struct {
 	// meta
 	sync.RWMutex
 	dbs    []string
@@ -42,9 +42,8 @@ type Client struct {
 	dbCluster    cluster
 }
 
-// New returns a new Client and ready to use
-func New() (*Client, error) {
-	client := &Client{
+func newClient() (*client, error) {
+	client := &client{
 		dbs:    []string{},
 		caches: []string{},
 	}
@@ -58,21 +57,21 @@ func New() (*Client, error) {
 	return client, nil
 }
 
-func (c *Client) setFastCache(cacheURL string) {
+func (c *client) setFastCache(cacheURL string) {
 	c.Lock()
 	defer c.Unlock()
 
 	c.fastCache = cacheURL
 }
 
-func (c *Client) setFastDB(dbURL string) {
+func (c *client) setFastDB(dbURL string) {
 	c.Lock()
 	defer c.Unlock()
 
 	c.fastDB = dbURL
 }
 
-func (c *Client) refresh() {
+func (c *client) refresh() {
 	ticker := time.NewTicker(config.Config().OncekvMetaRefreshPeroid)
 	for {
 		select {
@@ -84,7 +83,7 @@ func (c *Client) refresh() {
 	}
 }
 
-func (c *Client) update() error {
+func (c *client) update() error {
 	dbs, err := dbCluster.Peers()
 	if err != nil {
 		return err

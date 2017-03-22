@@ -43,7 +43,7 @@ type Option struct {
 
 // KV for kv storage
 type KV struct {
-	cli    *Client
+	cli    *client
 	option *Option
 }
 
@@ -63,7 +63,7 @@ func DefaultKV() (*KV, error) {
 
 // NewKV returns a new KV
 func NewKV(option *Option) (*KV, error) {
-	cli, err := New()
+	cli, err := newClient()
 	if err != nil {
 		return nil, err
 	}

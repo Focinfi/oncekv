@@ -53,6 +53,8 @@ type Node struct {
 	sync.RWMutex // protect updating for dbs and peers
 	// upderlying databse
 	dbs []string
+	// fast db
+	fastDB string
 	// cache peers
 	peers []string
 	// master url for update meta(dbs and peers)
@@ -211,65 +213,105 @@ func (n *Node) handleMeta(ctx *gin.Context) {
 }
 
 func (n *Node) fetchData(ctx groupcache.Context, key string, dest groupcache.Sink) error {
-	var dbs = make([]string, len(n.dbs))
-	copy(dbs, n.dbs)
-	if len(dbs) == 0 {
-		log.DB.Errorln(logPrefix, "no database")
-		return ErrDatabaseQueryTimeout
+	if n.fastDB == "" {
+		n.tryAllDBfind(ctx, key, dest)
 	}
 
+	data, err := n.find(key, n.fastDB)
+	if err == ErrDataNotFound {
+		return err
+	}
+
+	if err != nil {
+		log.DB.Error(logPrefix, err)
+		go n.setFastDB("")
+		return n.tryAllDBfind(ctx, key, dest)
+	}
+
+	dest.SetBytes(data)
+	return nil
+}
+
+func (n *Node) find(key string, url string) ([]byte, error) {
+	url = fmt.Sprintf(dbGetURLFormat, urlutil.MakeURL(url), key)
+	resp, err := httpGetter.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, ErrDataNotFound
+	}
+
+	if resp.StatusCode == http.StatusOK {
+		b, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(b) == 0 {
+			return nil, fmt.Errorf("%s database error, lost data of key: %s\n", logPrefix, key)
+		}
+
+		return b, nil
+	}
+
+	return nil, fmt.Errorf("%s failed to fetch data", logPrefix)
+}
+
+func (n *Node) tryAllDBfind(ctx groupcache.Context, key string, dest groupcache.Sink) error {
+	dbs := make([]string, len(n.dbs))
+	copy(dbs, n.dbs)
+	log.Biz.Infoln(logPrefix, "start fetchData:", time.Now(), dbs)
+	if len(dbs) == 0 {
+		return fmt.Errorf("%s databases are not available\n", logPrefix)
+	}
+
+	var got bool
 	var data = make(chan []byte)
-	var done bool
-	var completedCount int
+	var completeCount int
+	var fastURL string
+	var resErr error
 
 	for _, db := range dbs {
-		url := urlutil.MakeURL(db)
-		go func() {
-			url = fmt.Sprintf(dbGetURLFormat, url, key)
-			resp, err := httpGetter.Get(url)
-			var val []byte
-			var statusCode int
-
-			if err != nil {
-				log.DB.Errorln(logPrefix, "fetchData err:", err)
-			} else {
-				// read the res.Body only if err == nil
-				defer resp.Body.Close()
-
-				data, err := ioutil.ReadAll(resp.Body)
-				if err != nil {
-					log.DB.Infoln(logPrefix, url, err)
-				}
-
-				statusCode = resp.StatusCode
-				if statusCode == http.StatusOK {
-					val = data
-				}
-			}
+		go func(url string) {
+			val, err := n.find(key, url)
 
 			n.Lock()
 			defer n.Unlock()
+			if len(val) > 0 || err == ErrDataNotFound || completeCount == len(dbs) {
+				if !got {
+					got = true
+					fastURL = url
+					resErr = err
 
-			completedCount++
-			if statusCode == http.StatusOK || completedCount == len(dbs) {
-				if !done {
 					go func() { data <- val }()
-					done = true
 				}
 			}
-		}()
+		}(db)
 	}
 
 	select {
 	case <-time.After(dbQueryTimeout):
+		go n.setFastDB("")
 		return ErrDatabaseQueryTimeout
-	case val := <-data:
-		log.Biz.Infof("%s fetchData response: '%s'\n", logPrefix, string(val))
-		if len(val) > 0 {
-			dest.SetString(string(val))
-			return nil
+
+	case value := <-data:
+		log.Biz.Infoln(logPrefix, "end get:", time.Now())
+		dest.SetBytes(value)
+
+		if len(value) > 0 || resErr == ErrDataNotFound {
+			go n.setFastDB(fastURL)
 		}
 
-		return ErrDataNotFound
+		return resErr
 	}
+}
+
+func (n *Node) setFastDB(db string) {
+	n.Lock()
+	defer n.Unlock()
+
+	n.fastDB = db
 }

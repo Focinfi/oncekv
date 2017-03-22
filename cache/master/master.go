@@ -75,6 +75,11 @@ type Master struct {
 	nodesMapKey string
 }
 
+// Default returns a new Master with the default addr
+func Default() *Master {
+	return New(defaultAddr)
+}
+
 // New returns a new Master with the addr
 func New(addr string) *Master {
 	store, err := clientv3.New(

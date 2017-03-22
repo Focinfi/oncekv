@@ -8,7 +8,7 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/Focinfi/oncekv/master"
+	"github.com/Focinfi/oncekv/db/master"
 	"github.com/Focinfi/oncekv/raftboltdb"
 	"github.com/gin-gonic/gin"
 )

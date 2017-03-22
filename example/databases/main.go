@@ -10,8 +10,8 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/Focinfi/oncekv/httpd"
-	"github.com/Focinfi/oncekv/store"
+	"github.com/Focinfi/oncekv/db/node/httpd"
+	"github.com/Focinfi/oncekv/db/node/store"
 )
 
 // Command line defaults

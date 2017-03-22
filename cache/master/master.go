@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/Focinfi/oncekv/config"
+	"github.com/Focinfi/oncekv/db/master"
 	"github.com/Focinfi/oncekv/log"
-	"github.com/Focinfi/oncekv/master"
 	"github.com/Focinfi/oncekv/utils/urlutil"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/gin-gonic/gin"

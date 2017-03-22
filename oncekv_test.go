@@ -3,7 +3,6 @@ package oncekv
 import (
 	"os"
 	"testing"
-
 	"time"
 
 	"github.com/Focinfi/oncekv/cache/master"
@@ -21,6 +20,7 @@ func TestBasic(t *testing.T) {
 	os.Mkdir(testDataDir, 0711)
 	// clean test data
 	defer func() {
+		os.RemoveAll(testDataDir)
 	}()
 
 	// start cache master
@@ -53,7 +53,7 @@ func TestBasic(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	time.Sleep(time.Second * 1)
+	time.Sleep(time.Second)
 
 	if val != "bar" {
 		t.Errorf("oncekv: get expect bar, got %v\n", val)

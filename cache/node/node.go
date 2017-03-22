@@ -16,7 +16,7 @@ import (
 	"github.com/Focinfi/oncekv/config"
 	"github.com/Focinfi/oncekv/log"
 	"github.com/Focinfi/oncekv/utils/mock"
-	"github.com/Focinfi/sqs/util/urlutil"
+	"github.com/Focinfi/oncekv/utils/urlutil"
 	"github.com/gin-gonic/gin"
 	"github.com/golang/groupcache"
 )

@@ -3,7 +3,7 @@ package log
 import (
 	"os"
 
-	"github.com/Focinfi/sqs/config"
+	"github.com/Focinfi/oncekv/config"
 	"github.com/Sirupsen/logrus"
 )
 

@@ -79,9 +79,7 @@ type Master struct {
 }
 
 // Default returns a new Master with the default addr
-func Default() *Master {
-	return New(defaultAddr)
-}
+var Default = New(defaultAddr)
 
 // New returns a new Master with the addr
 func New(addr string) *Master {
@@ -118,6 +116,11 @@ func (m *Master) Start() {
 	go m.watchDBs()
 	go m.heartbeat()
 	log.Biz.Fatal(m.server.Run(m.addr))
+}
+
+// Peers returns the httpAddrs
+func (m *Master) Peers() ([]string, error) {
+	return m.nodesMap.httpAddrs(), nil
 }
 
 func newServer(m *Master) *gin.Engine {

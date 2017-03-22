@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Focinfi/oncekv/admin"
 	"github.com/Focinfi/oncekv/config"
 	"github.com/Focinfi/oncekv/log"
-	"github.com/Focinfi/oncekv/master"
 )
 
 type cluster interface {
@@ -22,8 +22,8 @@ func (c clusterFunc) Peers() ([]string, error) {
 }
 
 var (
-	dbCluster    = cluster(master.Default)
-	cacheCluster = cluster(master.Default.CacheMaster)
+	dbCluster    = cluster(admin.Default.DBMaster)
+	cacheCluster = cluster(admin.Default.CacheMaster)
 )
 
 // lient for requesting oncekv

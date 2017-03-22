@@ -29,7 +29,7 @@ func mockCacheAndDB(caches []string, dbs []string) {
 func TestNew(t *testing.T) {
 	setDefaultMockCacheAndDB()
 
-	client, err := New()
+	client, err := newClient()
 	if err != nil {
 		t.Fatal(err)
 	}

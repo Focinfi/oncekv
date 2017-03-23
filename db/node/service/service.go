@@ -1,20 +1,38 @@
-// Package httpd provides the HTTP server for accessing the distributed key-value store.
+// Package service provides the HTTP server for accessing the distributed key-value store.
 // It also provides the endpoint for other nodes to join an existing cluster.
-package httpd
+package service
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 
+	"encoding/json"
+
+	"bytes"
+
 	"github.com/Focinfi/oncekv/db/master"
+	"github.com/Focinfi/oncekv/db/node/store"
+	"github.com/Focinfi/oncekv/log"
 	"github.com/Focinfi/oncekv/raftboltdb"
+	"github.com/Focinfi/oncekv/utils/urlutil"
 	"github.com/gin-gonic/gin"
 )
 
+const (
+	logPrefix     = "db/node/service:"
+	joinURLFormat = "%s/join"
+)
+
+type joinParams struct {
+	Addr string `json:"addr"`
+}
+
 // Store is the interface Raft-backed key-value stores must implement.
 type Store interface {
+	// Open opens a store in a single mode or not
+	Open(singleMode bool) error
+
 	// Get returns the value for the given key.
 	Get(key string) (string, error)
 
@@ -36,47 +54,72 @@ type Store interface {
 
 // Service provides HTTP service.
 type Service struct {
-	httpAddr string
+	// raft server
 	raftAddr string
 	ln       net.Listener
-	*gin.Engine
 
+	//http server
+	*gin.Engine
+	httpAddr string
+
+	// underlying store
 	store Store
 }
 
 // New returns an uninitialized HTTP service.
-func New(httpAddr string, raftAddr string, store Store) *Service {
+func New(httpAddr string, raftAddr string, storeDir string) *Service {
+	storage := store.New()
+	storage.RaftBind = raftAddr
+	storage.RaftDir = storeDir
+
 	s := &Service{
 		httpAddr: httpAddr,
 		raftAddr: raftAddr,
-		store:    store,
+		store:    storage,
 		Engine:   gin.Default(),
 	}
 
 	s.GET("/i/key/:key", s.handleGet)
 	s.POST("/key", s.handleSet)
 	s.POST("/join", s.handleJoin)
+	s.GET("/stats", func(ctx *gin.Context) {
+		ctx.JSON(http.StatusOK, s.store.Stats())
+	})
 
 	return s
 }
 
 // Start starts the service.
 func (s *Service) Start() {
-	log.Println("Try to start")
-	go func() {
-		if err := s.Run(s.httpAddr); err != nil {
-			panic(err)
-		}
-	}()
-
 	if err := s.register(); err != nil {
-		panic(err)
+		log.DB.Fatal(err)
 	}
 
-	log.Println("Try to update peers")
-	if err := s.updatePeers(); err != nil {
-		log.Println("oncekv httpd: failed to update peers")
+	peers, err := master.Default.Peers()
+	if err != nil {
+		log.DB.Fatal(err)
 	}
+
+	log.DB.Infoln(logPrefix, "Peers:", peers)
+
+	if len(peers) == 0 {
+		if err := s.store.Open(true); err != nil {
+			log.DB.Fatal(err)
+		}
+
+		if err := master.Default.UpdatePeers([]string{s.httpAddr}); err != nil {
+			log.DB.Fatal(err)
+		}
+	} else {
+		if err := s.store.Open(false); err != nil {
+			log.DB.Fatal(err)
+		}
+		if err := s.tryToJoin(peers); err != nil {
+			log.DB.Fatal(err)
+		}
+	}
+
+	log.DB.Fatal(s.Run(s.httpAddr))
 }
 
 func (s *Service) handleGet(ctx *gin.Context) {
@@ -93,7 +136,7 @@ func (s *Service) handleGet(ctx *gin.Context) {
 
 	val, err := s.store.Get(key)
 	if err != nil {
-		fmt.Println("Get Error: ", val, err)
+		fmt.Println(logPrefix, "Get Error: ", val, err)
 		ctx.JSON(http.StatusInternalServerError, StatusInternalError)
 		return
 	}
@@ -107,8 +150,6 @@ func (s *Service) handleGet(ctx *gin.Context) {
 }
 
 func (s *Service) handleSet(ctx *gin.Context) {
-	fmt.Println("GET key")
-
 	if s.raftAddr != s.store.Leader() {
 		ctx.JSON(http.StatusBadRequest, StatusNotLeaderError)
 		return
@@ -131,7 +172,7 @@ func (s *Service) handleSet(ctx *gin.Context) {
 	}
 
 	if err != nil {
-		log.Println(err)
+		log.DB.Error(err)
 		ctx.JSON(http.StatusOK, StatusInternalError)
 		return
 	}
@@ -140,17 +181,20 @@ func (s *Service) handleSet(ctx *gin.Context) {
 }
 
 func (s *Service) handleJoin(ctx *gin.Context) {
-	var remoteAddr = &struct {
-		Addr string `json:"addr"`
-	}{}
+	if s.raftAddr != s.store.Leader() {
+		ctx.JSON(http.StatusBadRequest, StatusNotLeaderError)
+		return
+	}
+
+	var remoteAddr = &joinParams{}
 
 	if err := ctx.BindJSON(remoteAddr); err != nil {
-		ctx.JSON(http.StatusOK, StatusParamsError)
+		ctx.JSON(http.StatusBadRequest, StatusParamsError)
 		return
 	}
 
 	if err := s.store.Join(remoteAddr.Addr); err != nil {
-		ctx.JSON(http.StatusOK, StatusInternalError)
+		ctx.JSON(http.StatusInternalServerError, StatusInternalError)
 		return
 	}
 
@@ -158,9 +202,41 @@ func (s *Service) handleJoin(ctx *gin.Context) {
 
 	go func() {
 		if err := s.updatePeers(); err != nil {
-			log.Println(err)
+			log.DB.Error(err)
 		}
 	}()
+}
+
+func (s *Service) tryToJoin(peers []string) error {
+	if len(peers) == 0 {
+		return nil
+	}
+
+	for _, peer := range peers {
+		if peer == s.httpAddr {
+			continue
+		}
+
+		params := &joinParams{Addr: s.raftAddr}
+		b, err := json.Marshal(params)
+		if err != nil {
+			return err
+		}
+
+		url := fmt.Sprintf(joinURLFormat, urlutil.MakeURL(peer))
+		res, err := http.Post(url, "application/json", bytes.NewReader(b))
+		if err != nil {
+			log.DB.Error(err)
+			continue
+		}
+
+		defer res.Body.Close()
+		if res.StatusCode == http.StatusOK {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("%s failed to join\n", logPrefix)
 }
 
 func (s *Service) updatePeers() error {

@@ -9,8 +9,7 @@ import (
 	"github.com/Focinfi/oncekv/cache/node"
 	"github.com/Focinfi/oncekv/client"
 	"github.com/Focinfi/oncekv/config"
-	"github.com/Focinfi/oncekv/db/node/httpd"
-	"github.com/Focinfi/oncekv/db/node/store"
+	"github.com/Focinfi/oncekv/db/node/service"
 )
 
 const testDataDir = "test_data"
@@ -28,14 +27,9 @@ func TestBasic(t *testing.T) {
 	// start cache node
 	go node.New(":55461", ":55462", config.Config().CacheMasterAddr).Start()
 
+	time.Sleep(time.Second)
 	// create a single raft cluster
-	s := store.New()
-	s.RaftDir = testDataDir
-	s.RaftBind = ":55464"
-	if err := s.Open(true); err != nil {
-		t.Fatal(err)
-	}
-	go httpd.New(":55463", s.RaftBind, s).Start()
+	go service.New(":55463", ":55464", testDataDir).Start()
 
 	time.Sleep(time.Second * 2)
 

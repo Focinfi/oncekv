@@ -78,7 +78,7 @@ func newDefaultConfig() Configuration {
 		IdealResponseDuration:   time.Millisecond * 50,
 		CacheBytes:              1 << 20,
 		CacheMasterAddr:         ":5550",
-		RaftNodesKey:            "oncekv.nodes",
+		RaftNodesKey:            "oncekv.db.nodes",
 		CacheNodesKey:           "oncekv.cache.nodes",
 		RaftKey:                 "oncekv.nodes.http.adrr",
 	}

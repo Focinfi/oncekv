@@ -13,10 +13,8 @@ type Meta struct {
 	data map[string]string
 }
 
-// NewMeta returns a new Meta
-func NewMeta() *Meta {
-	return &Meta{data: map[string]string{}}
-}
+// Default for default mock meta
+var Default = &Meta{data: map[string]string{}}
 
 // Get gets the value of the given key
 func (m *Meta) Get(key string) (string, error) {

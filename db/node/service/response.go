@@ -1,4 +1,4 @@
-package httpd
+package service
 
 const (
 	// OK for successful reponse

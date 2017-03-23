@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	logPrefix      = "oncekv/client:"
+	logPrefix      = "client:"
 	dbGetURLFormat = "%s/key/%s"
 	dbPutURLFormat = "%s/key"
 )

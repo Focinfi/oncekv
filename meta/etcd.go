@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/Focinfi/oncekv/config"
-	"github.com/Focinfi/sqs/log"
+	"github.com/Focinfi/oncekv/log"
 	"github.com/coreos/etcd/clientv3"
 )
 
@@ -14,7 +14,7 @@ type etcd struct {
 
 func newEtcd() (*etcd, error) {
 	cli, err := clientv3.New(clientv3.Config{
-		Endpoints: []string{defaultEtcdEndpoint},
+		Endpoints: config.Config().EtcdEndpoints,
 	})
 
 	if err != nil {

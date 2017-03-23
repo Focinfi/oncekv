@@ -21,7 +21,7 @@ const (
 	defaultHeartbeatPeriod = time.Second * 1
 	jsonHTTPHeader         = "application/json"
 	heartbeatURLFormat     = "%s/meta"
-	logPrefix              = "oncekv cache/master:"
+	logPrefix              = "cache/master:"
 )
 
 var (

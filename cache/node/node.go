@@ -26,7 +26,7 @@ const (
 	defaultGroup        = "kv"
 	masterJoinURLFormat = "%s/join"
 	dbGetURLFormat      = "%s/i/key/%s"
-	logPrefix           = "oncekv/cachenode:"
+	logPrefix           = "cache/node:"
 )
 
 var (

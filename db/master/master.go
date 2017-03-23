@@ -43,11 +43,6 @@ func (m *Master) UpdatePeers(peers []string) error {
 
 // RegisterPeer register peer
 func (m *Master) RegisterPeer(raftAddr, httpAddr string) error {
-	_, err := m.PeerHTTPAddr(raftAddr)
-	if err != nil {
-		return err
-	}
-
 	return m.meta.Put(httpAddrKeyOfRaftAddr(raftAddr), httpAddr)
 }
 

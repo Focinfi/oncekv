@@ -3,7 +3,6 @@ package node
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -32,9 +31,9 @@ const (
 
 var (
 	// ErrDataNotFound for not found data error
-	ErrDataNotFound = errors.New("groupcache node: data not found")
+	ErrDataNotFound = fmt.Errorf("%s data not found", logPrefix)
 	// ErrDatabaseQueryTimeout for upderlying data query timeout error
-	ErrDatabaseQueryTimeout = errors.New("gropcache node: upderlying data query timeout")
+	ErrDatabaseQueryTimeout = fmt.Errorf("%s upderlying data query timeout", logPrefix)
 
 	dbQueryTimeout  = config.Config().HTTPRequestTimeout
 	gorupCacheBytes = config.Config().CacheBytes

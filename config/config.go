@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"io"
 	"os"
 
@@ -21,6 +22,11 @@ const (
 	production = "production"
 )
 
+var (
+	// ErrDataNotFound error for data not found
+	ErrDataNotFound = errors.New("oncekv: data not found")
+)
+
 // Envroinment for application envroinment
 type Envroinment string
 
@@ -36,14 +42,14 @@ func (e Envroinment) IsDevelop() bool {
 
 // IsTest returns if the env equals to develop
 func (e Envroinment) IsTest() bool {
-	return e == develop
+	return e == test
 }
 
-var env = Envroinment(develop)
+var env = develop
 
 // Env returns the env
 func Env() Envroinment {
-	return env
+	return Envroinment(env)
 }
 
 // Configuration defines configuration
@@ -99,8 +105,8 @@ func Config() Configuration {
 }
 
 func init() {
-	if e := os.Getenv("SQS_ENV"); e != "" {
-		env = Envroinment(e)
+	if e := os.Getenv("ONCEKV_ENV"); e != "" {
+		env = e
 	}
 
 	if Env().IsProduction() {

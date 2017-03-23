@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Focinfi/oncekv/meta"
+	"github.com/Focinfi/oncekv/config"
 )
 
 // Meta a meta.Meta mock
@@ -25,7 +25,7 @@ func (m *Meta) Get(key string) (string, error) {
 
 	val, ok := m.data[key]
 	if !ok {
-		return "", meta.ErrDataNotFound
+		return "", config.ErrDataNotFound
 	}
 
 	return val, nil

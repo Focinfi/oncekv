@@ -3,6 +3,7 @@ DEPS = $(go list -f '{{range .TestImports}}{{.}} {{end}}' ./...)
 .PHONY: test deps
 
 test:
+	export ONCEKV_ENV=test
 	go test -timeout=30s ./...
 
 deps:

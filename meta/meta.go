@@ -1,5 +1,11 @@
 package meta
 
+import (
+	"github.com/Focinfi/oncekv/config"
+	"github.com/Focinfi/oncekv/utils/mock"
+	"github.com/Focinfi/sqs/log"
+)
+
 const defaultEtcdEndpoint = "localhost:2379"
 
 // KV defines a KV storage
@@ -33,6 +39,12 @@ func New() (Meta, error) {
 }
 
 func init() {
+	if config.Env().IsTest() {
+		log.DB.Info("Test Mode, use mock meta")
+		Default = mock.NewMeta()
+		return
+	}
+
 	meta, err := New()
 	if err != nil {
 		panic(err)

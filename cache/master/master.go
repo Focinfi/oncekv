@@ -153,7 +153,7 @@ func (m *Master) fetchNodesMap() (nodesMap, error) {
 	nodes := nodesMap{}
 
 	val, err := m.meta.Get(m.nodesMapKey)
-	if err == meta.ErrDataNotFound {
+	if err == config.ErrDataNotFound {
 		return nodes, nil
 	}
 

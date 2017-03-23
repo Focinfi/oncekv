@@ -2,14 +2,11 @@ package meta
 
 import (
 	"context"
-	"errors"
 
+	"github.com/Focinfi/oncekv/config"
 	"github.com/Focinfi/sqs/log"
 	"github.com/coreos/etcd/clientv3"
 )
-
-// ErrDataNotFound for data not found error
-var ErrDataNotFound = errors.New("etcd: data not found")
 
 type etcd struct {
 	cli *clientv3.Client
@@ -36,7 +33,7 @@ func (e *etcd) Get(key string) (string, error) {
 	}
 
 	if len(res.Kvs) == 0 {
-		return "", ErrDataNotFound
+		return "", config.ErrDataNotFound
 	}
 
 	return string(res.Kvs[0].Value), nil

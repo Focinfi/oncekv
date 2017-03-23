@@ -11,14 +11,11 @@ import (
 	"github.com/Focinfi/oncekv/config"
 	"github.com/Focinfi/oncekv/db/node/httpd"
 	"github.com/Focinfi/oncekv/db/node/store"
-	"github.com/Focinfi/oncekv/meta"
-	"github.com/Focinfi/oncekv/utils/mock"
 )
 
 const testDataDir = "test_data"
 
 func TestBasic(t *testing.T) {
-	meta.Default = mock.NewMeta()
 	os.RemoveAll(testDataDir)
 	os.Mkdir(testDataDir, 0711)
 	// clean test data
@@ -40,13 +37,13 @@ func TestBasic(t *testing.T) {
 	}
 	go httpd.New(":55463", s.RaftBind, s).Start()
 
+	time.Sleep(time.Second * 2)
+
 	// create client
 	cli, err := client.DefaultKV()
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	time.Sleep(time.Second * 2)
 
 	// set foo/bar
 	cli.Put("foo", "bar")

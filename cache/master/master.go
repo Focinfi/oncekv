@@ -2,7 +2,6 @@ package master
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,8 +12,8 @@ import (
 	"github.com/Focinfi/oncekv/config"
 	"github.com/Focinfi/oncekv/db/master"
 	"github.com/Focinfi/oncekv/log"
+	"github.com/Focinfi/oncekv/meta"
 	"github.com/Focinfi/oncekv/utils/urlutil"
-	"github.com/coreos/etcd/clientv3"
 	"github.com/gin-gonic/gin"
 )
 
@@ -74,7 +73,7 @@ type Master struct {
 	addr   string
 
 	// databse store
-	store       *clientv3.Client
+	meta        meta.Meta
 	nodesMapKey string
 }
 
@@ -83,20 +82,10 @@ var Default = New(defaultAddr)
 
 // New returns a new Master with the addr
 func New(addr string) *Master {
-	store, err := clientv3.New(
-		clientv3.Config{
-			Endpoints: etcdEndpoints,
-		},
-	)
-
-	if err != nil {
-		panic(err)
-	}
-
 	m := &Master{
 		addr:        addr,
-		store:       store,
 		nodesMapKey: cacheNodesKey,
+		meta:        meta.Default,
 	}
 
 	nodesMap, err := m.fetchNodesMap()
@@ -113,7 +102,7 @@ func New(addr string) *Master {
 
 // Start starts the master listening on addr
 func (m *Master) Start() {
-	go m.watchDBs()
+	go m.meta.WatchModify(m.nodesMapKey, func() { m.syncDBs() })
 	go m.heartbeat()
 	log.Biz.Fatal(m.server.Run(m.addr))
 }
@@ -163,12 +152,12 @@ func (m *Master) handleJoinNode(ctx *gin.Context) {
 func (m *Master) fetchNodesMap() (nodesMap, error) {
 	nodes := nodesMap{}
 
-	val, err := m.store.Get(context.TODO(), m.nodesMapKey)
-	if err != nil || len(val.Kvs) == 0 {
-		return nodes, err
+	val, err := m.meta.Get(m.nodesMapKey)
+	if err == meta.ErrDataNotFound {
+		return nodes, nil
 	}
 
-	if err := json.Unmarshal(val.Kvs[0].Value, &nodes); err != nil {
+	if err := json.Unmarshal([]byte(val), &nodes); err != nil {
 		return nodes, err
 	}
 
@@ -181,12 +170,7 @@ func (m *Master) updateNodesMap(peers nodesMap) error {
 		return err
 	}
 
-	_, err = m.store.Put(context.TODO(), m.nodesMapKey, string(b))
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return m.meta.Put(m.nodesMapKey, string(b))
 }
 
 // heartbeat for check the nodes health periodicly
@@ -251,31 +235,8 @@ func (m *Master) removeNode(node string) {
 		log.DB.Errorln(logPrefix, "database error:", err)
 	}
 
-	log.DB.Errorln(logPrefix, node, "remoted")
+	log.DB.Errorln(logPrefix, node, "removed")
 	m.Unlock()
-}
-
-func (m *Master) watchDBs() {
-	ch := m.store.Watch(context.TODO(), raftNodesKey)
-
-	for {
-		resp := <-ch
-		log.DB.Infoln(logPrefix, "watchDBs:", string(resp.Events[0].Kv.Value))
-		if resp.Canceled {
-			ch = m.store.Watch(context.TODO(), raftNodesKey)
-			continue
-		}
-
-		if err := resp.Err(); err != nil {
-			log.DB.Infoln(logPrefix, "failed to watch dbs, err: ", err)
-		}
-
-		for _, event := range resp.Events {
-			if event.IsModify() {
-				m.syncDBs()
-			}
-		}
-	}
 }
 
 func (m *Master) syncDBs() error {

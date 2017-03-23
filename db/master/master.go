@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/Focinfi/oncekv/config"
+	"github.com/Focinfi/oncekv/meta"
 )
 
 var (
@@ -12,7 +13,7 @@ var (
 
 // Master is the master of a raft group
 type Master struct {
-	meta kv
+	meta meta.Meta
 }
 
 // Peers returns the peers
@@ -37,7 +38,7 @@ func (m *Master) UpdatePeers(peers []string) error {
 		return err
 	}
 
-	return m.meta.Set(raftNodesKey, string(b))
+	return m.meta.Put(raftNodesKey, string(b))
 }
 
 // RegisterPeer register peer
@@ -47,7 +48,7 @@ func (m *Master) RegisterPeer(raftAddr, httpAddr string) error {
 		return err
 	}
 
-	return m.meta.Set(httpAddrKeyOfRaftAddr(raftAddr), httpAddr)
+	return m.meta.Put(httpAddrKeyOfRaftAddr(raftAddr), httpAddr)
 }
 
 // PeerHTTPAddr get the httpAddr for the raft
@@ -59,10 +60,5 @@ func (m *Master) PeerHTTPAddr(raftAddr string) (string, error) {
 var Default = &Master{}
 
 func init() {
-	kv, err := newEtcdKV()
-	if err != nil {
-		panic(err)
-	}
-
-	Default.meta = kv
+	Default.meta = meta.Default
 }

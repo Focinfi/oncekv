@@ -1,3 +1,4 @@
 .DS_Store
 example/databases/data
-/test_data
+test_data
+admin/fe/node_modules

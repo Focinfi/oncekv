@@ -65,6 +65,7 @@ type Configuration struct {
 	RaftNodesKey string
 	// CacheNodesKey for cache nodes store key
 	CacheNodesKey string
+	AdminAddr     string
 
 	RaftKey string
 }
@@ -81,6 +82,7 @@ func newDefaultConfig() Configuration {
 		RaftNodesKey:            "oncekv.db.nodes",
 		CacheNodesKey:           "oncekv.cache.nodes",
 		RaftKey:                 "oncekv.nodes.http.adrr",
+		AdminAddr:               ":5546",
 	}
 }
 
@@ -96,6 +98,10 @@ func Config() Configuration {
 			IdealResponseDuration:   time.Millisecond * 50,
 			CacheBytes:              1 << 32,
 			CacheMasterAddr:         ":5550",
+			RaftNodesKey:            "oncekv.db.nodes",
+			CacheNodesKey:           "oncekv.cache.nodes",
+			RaftKey:                 "oncekv.nodes.http.adrr",
+			AdminAddr:               ":5546",
 		}
 	case developEnv:
 		return newDefaultConfig()

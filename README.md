@@ -1,4 +1,4 @@
-## oncekv
+## oncekv [![Build Status](https://travis-ci.org/Focinfi/oncekv.png)](https://travis-ci.org/Focinfi/oncekv.svg?branch=master)
 
 A key/value database, each pair of key/value can be set only one time.
 

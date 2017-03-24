@@ -3,14 +3,12 @@ package master
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"reflect"
 	"sort"
 	"sync"
 	"time"
-
-	"net/http"
-
-	"io/ioutil"
 
 	"github.com/Focinfi/oncekv/config"
 	"github.com/Focinfi/oncekv/log"
@@ -32,6 +30,16 @@ type Master struct {
 	sync.RWMutex
 	stats map[string]map[string]string
 	meta  meta.Meta
+}
+
+// Peers returns the peers
+func (m *Master) Peers() ([]string, error) {
+	return m.fetchPeers()
+}
+
+// Stats returns the stats of peers
+func (m *Master) Stats() map[string]map[string]string {
+	return m.stats
 }
 
 // Start starts manage peers
@@ -141,11 +149,6 @@ func (m *Master) getNodeStats(url string) (map[string]string, error) {
 	}
 
 	return nil, fmt.Errorf("%s %s returns %d\n", logPerfix, url, res.StatusCode)
-}
-
-// Peers returns the peers
-func (m *Master) Peers() ([]string, error) {
-	return m.fetchPeers()
 }
 
 func (m *Master) fetchPeers() ([]string, error) {

@@ -101,6 +101,11 @@ func (n *Node) Start() {
 func newServer(c *Node) *gin.Engine {
 	server := gin.Default()
 	server.POST("/meta", c.handleMeta)
+
+	server.GET("/stats", func(ctx *gin.Context) {
+		ctx.JSON(http.StatusOK, c.group.Stats)
+	})
+
 	server.GET("/key/:key", func(ctx *gin.Context) {
 		result := &groupcache.ByteView{}
 		err := c.group.Get(ctx.Request.Context(), ctx.Param("key"), groupcache.ByteViewSink(result))

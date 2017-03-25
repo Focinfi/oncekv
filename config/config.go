@@ -7,6 +7,8 @@ import (
 
 	"time"
 
+	"path"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -46,10 +48,16 @@ func (e Envroinment) IsTest() bool {
 }
 
 var env = develop
+var root = ""
 
 // Env returns the env
 func Env() Envroinment {
 	return Envroinment(env)
+}
+
+// Root returns the root path of oncekv
+func Root() string {
+	return root
 }
 
 // Configuration defines configuration
@@ -73,16 +81,16 @@ type Configuration struct {
 func newDefaultConfig() Configuration {
 	return Configuration{
 		LogOut:                  os.Stdout,
-		EtcdEndpoints:           []string{"localhost:2379"},
+		EtcdEndpoints:           []string{"127.0.0.1:2379"},
 		OncekvMetaRefreshPeroid: time.Second,
 		HTTPRequestTimeout:      time.Millisecond * 100,
 		IdealResponseDuration:   time.Millisecond * 50,
 		CacheBytes:              1 << 20,
-		CacheMasterAddr:         ":5550",
+		CacheMasterAddr:         "127.0.0.1:5550",
 		RaftNodesKey:            "oncekv.db.nodes",
 		CacheNodesKey:           "oncekv.cache.nodes",
 		RaftKey:                 "oncekv.nodes.http.adrr",
-		AdminAddr:               ":5546",
+		AdminAddr:               "127.0.0.1:5546",
 	}
 }
 
@@ -97,11 +105,11 @@ func Config() Configuration {
 			HTTPRequestTimeout:      time.Millisecond * 100,
 			IdealResponseDuration:   time.Millisecond * 50,
 			CacheBytes:              1 << 32,
-			CacheMasterAddr:         ":5550",
+			CacheMasterAddr:         "127.0.0.1:5550",
 			RaftNodesKey:            "oncekv.db.nodes",
 			CacheNodesKey:           "oncekv.cache.nodes",
 			RaftKey:                 "oncekv.nodes.http.adrr",
-			AdminAddr:               ":5546",
+			AdminAddr:               "127.0.0.1:5546",
 		}
 	case developEnv:
 		return newDefaultConfig()
@@ -117,5 +125,11 @@ func init() {
 
 	if Env().IsProduction() {
 		gin.SetMode(gin.ReleaseMode)
+	}
+
+	if r := os.Getenv("GOPATH"); r != "" {
+		root = path.Join(r, "src", "github.com", "Focinfi", "oncekv")
+	} else {
+		panic("oncekv: envroinment param $GOPATH not set")
 	}
 }

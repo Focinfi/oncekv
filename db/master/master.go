@@ -2,10 +2,7 @@ package master
 
 import (
 	"encoding/json"
-	"fmt"
-	"io/ioutil"
 	"net/http"
-	"reflect"
 	"sort"
 	"sync"
 	"time"
@@ -13,6 +10,7 @@ import (
 	"github.com/Focinfi/oncekv/config"
 	"github.com/Focinfi/oncekv/log"
 	"github.com/Focinfi/oncekv/meta"
+	"github.com/Focinfi/oncekv/utils/mock"
 	"github.com/Focinfi/oncekv/utils/urlutil"
 )
 
@@ -27,19 +25,13 @@ var (
 
 // Master is the master of a raft group
 type Master struct {
-	sync.RWMutex
-	stats map[string]map[string]string
-	meta  meta.Meta
+	meta   meta.Meta
+	getter mock.HTTPGetter
 }
 
 // Peers returns the peers
 func (m *Master) Peers() ([]string, error) {
 	return m.fetchPeers()
-}
-
-// Stats returns the stats of peers
-func (m *Master) Stats() map[string]map[string]string {
-	return m.stats
 }
 
 // Start starts manage peers
@@ -63,21 +55,21 @@ func (m *Master) heartbeat() {
 	log.Biz.Infoln(peers)
 	toRemove := []string{}
 	var wg sync.WaitGroup
+	var mux sync.Mutex
+
 	for _, peer := range peers {
 		wg.Add(1)
 		go func(url string) {
 			defer wg.Done()
 
-			stats, err := m.getNodeStats(url)
+			_, err := m.getter.Get(urlutil.MakeURL(url))
 			if err != nil {
 				log.DB.Error(err)
-				m.Lock()
-				defer m.Unlock()
+				mux.Lock()
+				defer mux.Unlock()
 				toRemove = append(toRemove, url)
 				return
 			}
-
-			go m.updateStats(url, stats)
 		}(peer)
 	}
 
@@ -86,13 +78,6 @@ func (m *Master) heartbeat() {
 	if len(toRemove) > 0 {
 		go m.removeNodes(toRemove)
 	}
-}
-
-func (m *Master) updateStats(node string, stats map[string]string) {
-	m.Lock()
-	defer m.Unlock()
-
-	m.stats[node] = stats
 }
 
 func (m *Master) removeNodes(nodes []string) {
@@ -126,31 +111,6 @@ func (m *Master) removeNodes(nodes []string) {
 	}
 }
 
-func (m *Master) getNodeStats(url string) (map[string]string, error) {
-	url = fmt.Sprintf(statsURLFormat, urlutil.MakeURL(url))
-	res, err := http.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer res.Body.Close()
-
-	if res.StatusCode == http.StatusOK {
-		b, err := ioutil.ReadAll(res.Body)
-		if err != nil {
-			return nil, err
-		}
-
-		stats := make(map[string]string)
-		if err := json.Unmarshal(b, &stats); err != nil {
-			return nil, err
-		}
-
-		return stats, nil
-	}
-
-	return nil, fmt.Errorf("%s %s returns %d\n", logPerfix, url, res.StatusCode)
-}
-
 func (m *Master) fetchPeers() ([]string, error) {
 	peers := []string{}
 	val, err := m.meta.Get(raftNodesKey)
@@ -177,19 +137,6 @@ func (m *Master) UpdatePeers(peers []string) error {
 		return err
 	}
 
-	curPeers, err := m.fetchPeers()
-	if err != nil {
-		return err
-	}
-
-	log.Biz.Infoln(logPerfix, "UpdatePeers:", peers, curPeers)
-
-	m.Lock()
-	defer m.Unlock()
-	if reflect.DeepEqual(peers, curPeers) {
-		return nil
-	}
-
 	return m.meta.Put(raftNodesKey, string(b))
 }
 
@@ -204,10 +151,11 @@ func (m *Master) PeerHTTPAddr(raftAddr string) (string, error) {
 }
 
 // Default for the default master
-var Default = &Master{
-	stats: make(map[string]map[string]string),
-}
+var Default *Master
 
 func init() {
-	Default.meta = meta.Default
+	Default = &Master{
+		meta:   meta.Default,
+		getter: mock.HTTPGetterFunc(http.Get),
+	}
 }

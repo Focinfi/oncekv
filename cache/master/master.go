@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"sort"
+
 	"github.com/Focinfi/oncekv/config"
 	"github.com/Focinfi/oncekv/db/master"
 	"github.com/Focinfi/oncekv/log"
@@ -42,6 +44,7 @@ func (p nodesMap) httpAddrs() []string {
 		i++
 	}
 
+	sort.StringSlice(addrs).Sort()
 	return addrs
 }
 
@@ -53,6 +56,7 @@ func (p nodesMap) nodeAddrs() []string {
 		i++
 	}
 
+	sort.StringSlice(addrs).Sort()
 	return addrs
 }
 
@@ -109,7 +113,12 @@ func (m *Master) Start() {
 
 // Peers returns the httpAddrs
 func (m *Master) Peers() ([]string, error) {
-	return m.nodesMap.httpAddrs(), nil
+	peers, err := m.fetchNodesMap()
+	if err != nil {
+		return nil, err
+	}
+
+	return peers.httpAddrs(), nil
 }
 
 func newServer(m *Master) *gin.Engine {

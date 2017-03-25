@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"time"
 
 	"encoding/json"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/Focinfi/oncekv/raftboltdb"
 	"github.com/Focinfi/oncekv/utils/urlutil"
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 )
 
 const (
@@ -84,6 +86,35 @@ func New(httpAddr string, raftAddr string, storeDir string) *Service {
 	s.POST("/join", s.handleJoin)
 	s.GET("/stats", func(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, s.store.Stats())
+	})
+
+	var wsupgrader = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	}
+
+	s.GET("/ws/stats", func(ctx *gin.Context) {
+		conn, err := wsupgrader.Upgrade(ctx.Writer, ctx.Request, nil)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err})
+			return
+		}
+
+		for {
+			select {
+			case <-time.After(time.Second):
+				b, err := json.Marshal(s.store.Stats())
+				if err != nil {
+					log.DB.Error(err)
+					continue
+				}
+
+				conn.WriteMessage(1, b)
+			}
+		}
 	})
 
 	return s

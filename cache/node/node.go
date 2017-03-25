@@ -18,6 +18,7 @@ import (
 	"github.com/Focinfi/oncekv/utils/urlutil"
 	"github.com/gin-gonic/gin"
 	"github.com/golang/groupcache"
+	"github.com/gorilla/websocket"
 )
 
 const (
@@ -108,7 +109,9 @@ func newServer(c *Node) *gin.Engine {
 
 	server.GET("/key/:key", func(ctx *gin.Context) {
 		result := &groupcache.ByteView{}
+		log.DB.Infoln("Start Get")
 		err := c.group.Get(ctx.Request.Context(), ctx.Param("key"), groupcache.ByteViewSink(result))
+		log.DB.Infoln("End Get")
 		if err == ErrDataNotFound {
 			ctx.JSON(http.StatusNotFound, nil)
 			return
@@ -124,6 +127,36 @@ func newServer(c *Node) *gin.Engine {
 		ctx.Writer.Header()["Content-Type"] = []string{"application/json; charset=utf-8"}
 		ctx.Writer.Write(result.ByteSlice())
 	})
+
+	var wsupgrader = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	}
+
+	server.GET("/ws/stats", func(ctx *gin.Context) {
+		conn, err := wsupgrader.Upgrade(ctx.Writer, ctx.Request, nil)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err})
+			return
+		}
+
+		for {
+			select {
+			case <-time.After(time.Second):
+				b, err := json.Marshal(c.group.Stats)
+				if err != nil {
+					log.DB.Error(err)
+					continue
+				}
+
+				conn.WriteMessage(1, b)
+			}
+		}
+	})
+
 	return server
 }
 
@@ -160,8 +193,6 @@ func (n *Node) join() {
 	if res.StatusCode != http.StatusOK {
 		panic(fmt.Sprintf("%s failed to join into master", logPrefix))
 	}
-
-	defer res.Body.Close()
 
 	// read reponse
 	b, err = ioutil.ReadAll(res.Body)

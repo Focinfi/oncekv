@@ -9,3 +9,9 @@ A key/value database, each pair of key/value can be set only one time.
 1. Performance, using groupcache for read cache.
 1. Reliable, using raft.
 1. Easy horizontal scaling, simple HTTP API.
+
+### Admin Page
+
+![admin](http://on78mzb4g.bkt.clouddn.com/oncekv-admin.jpeg.webp)
+
+Powered by [vuejs](https://github.com/vuejs) and [element](https://github.com/ElemeFE/element)

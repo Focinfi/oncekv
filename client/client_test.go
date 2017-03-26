@@ -4,8 +4,6 @@ import (
 	"reflect"
 	"testing"
 	"time"
-
-	"github.com/Focinfi/oncekv/config"
 )
 
 func mockCluster(addrs []string, err error) cluster {
@@ -49,7 +47,7 @@ func TestNew(t *testing.T) {
 
 	// wait
 	select {
-	case <-time.After(config.Config().OncekvMetaRefreshPeroid * 2):
+	case <-time.After(time.Second * 2):
 	}
 
 	if !reflect.DeepEqual(client.caches, newCaches) {

@@ -23,8 +23,8 @@ const (
 )
 
 var (
-	requestTimeout       = config.Config().HTTPRequestTimeout
-	idealReponseDuration = config.Config().IdealResponseDuration
+	requestTimeout       = config.Config.HTTPRequestTimeout
+	idealReponseDuration = config.Config.IdealResponseDuration
 	// ErrDataNotFound for data not found response
 	ErrDataNotFound = fmt.Errorf("%s data not found", logPrefix)
 

@@ -8,14 +8,14 @@ import (
 )
 
 func init() {
-	if config.Env().IsProduction() {
+	if config.Config.Env.IsProduction() {
 		logrus.SetFormatter(&logrus.JSONFormatter{})
 		logrus.SetLevel(logrus.WarnLevel)
 	} else {
 		logrus.SetFormatter(&logrus.TextFormatter{})
 		logrus.SetLevel(logrus.DebugLevel)
 	}
-	logrus.SetOutput(config.Config().LogOut)
+	logrus.SetOutput(config.Config.LogOut)
 
 	// Biz
 	Biz.Level = logrus.DebugLevel

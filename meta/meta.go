@@ -37,7 +37,7 @@ func New() (Meta, error) {
 }
 
 func init() {
-	if config.Env().IsTest() {
+	if config.Config.Env.IsTest() {
 		log.DB.Info("Test Mode, use mock meta")
 		Default = mock.Default
 		return

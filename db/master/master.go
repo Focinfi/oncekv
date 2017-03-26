@@ -20,7 +20,7 @@ const (
 )
 
 var (
-	raftNodesKey = config.Config().RaftNodesKey
+	raftNodesKey = config.Config.RaftNodesKey
 )
 
 // Master is the master of a raft group
@@ -137,6 +137,7 @@ func (m *Master) UpdatePeers(peers []string) error {
 		return err
 	}
 
+	log.DB.Info("To Update perrs:", peers)
 	return m.meta.Put(raftNodesKey, string(b))
 }
 

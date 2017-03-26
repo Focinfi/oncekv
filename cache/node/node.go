@@ -36,8 +36,8 @@ var (
 	// ErrDatabaseQueryTimeout for upderlying data query timeout error
 	ErrDatabaseQueryTimeout = fmt.Errorf("%s upderlying data query timeout", logPrefix)
 
-	dbQueryTimeout  = config.Config().HTTPRequestTimeout
-	gorupCacheBytes = config.Config().CacheBytes
+	dbQueryTimeout  = config.Config.HTTPRequestTimeout
+	gorupCacheBytes = config.Config.CacheBytes
 
 	httpGetter = mock.HTTPGetter(mock.HTTPGetterFunc(http.Get))
 )
@@ -142,6 +142,7 @@ func newServer(c *Node) *gin.Engine {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err})
 			return
 		}
+		defer conn.Close()
 
 		for {
 			select {
@@ -152,7 +153,9 @@ func newServer(c *Node) *gin.Engine {
 					continue
 				}
 
-				conn.WriteMessage(1, b)
+				if err := conn.WriteMessage(1, b); err != nil {
+					return
+				}
 			}
 		}
 	})

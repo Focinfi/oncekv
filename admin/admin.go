@@ -3,12 +3,9 @@ package admin
 import (
 	"encoding/json"
 	"net/http"
-	"path"
 	"time"
 
 	"reflect"
-
-	"io/ioutil"
 
 	cache "github.com/Focinfi/oncekv/cache/master"
 	"github.com/Focinfi/oncekv/config"
@@ -18,7 +15,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var defaulAddr = config.Config().AdminAddr
+var defaulAddr = config.Config.AdminAddr
 
 // Admin for oncekv admin
 type Admin struct {
@@ -37,18 +34,6 @@ func (a *Admin) Start() {
 
 func (a *Admin) newServer() *gin.Engine {
 	engine := gin.Default()
-	dashboardPath := path.Join(config.Root(), "admin", "index.html")
-
-	engine.GET("/dashboard", func(ctx *gin.Context) {
-		b, err := ioutil.ReadFile(dashboardPath)
-		if err != nil {
-			ctx.String(http.StatusNotFound, "page not found")
-			return
-		}
-
-		ctx.Data(http.StatusOK, "text/html; charset=utf-8", b)
-	})
-
 	engine.GET("/caches", func(ctx *gin.Context) {
 		peers, err := a.CacheMaster.Peers()
 		if err != nil {
@@ -83,6 +68,7 @@ func (a *Admin) newServer() *gin.Engine {
 			log.Internal.Error(err)
 			return
 		}
+		defer conn.Close()
 
 		peers := []string{}
 
@@ -117,6 +103,7 @@ func (a *Admin) newServer() *gin.Engine {
 			log.Internal.Error(err)
 			return
 		}
+		defer conn.Close()
 
 		peers := []string{}
 
@@ -141,7 +128,9 @@ func (a *Admin) newServer() *gin.Engine {
 				}
 
 				peers = newPeers
-				conn.WriteMessage(1, b)
+				if err := conn.WriteMessage(1, b); err != nil {
+					return
+				}
 			}
 		}
 	})

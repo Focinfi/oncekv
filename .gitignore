@@ -1,4 +1,4 @@
 .DS_Store
-example/databases/data
+example/databases/node/data
 test_data
 admin/fe/node_modules

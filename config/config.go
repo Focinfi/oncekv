@@ -1,135 +1,78 @@
 package config
 
 import (
-	"errors"
+	"fmt"
 	"io"
 	"os"
-
+	"path"
 	"time"
 
-	"path"
-
-	"github.com/gin-gonic/gin"
+	"github.com/jinzhu/configor"
 )
 
-const (
-	testEnv       = "test"
-	developEnv    = "develop"
-	productionEnv = "production"
-)
-
-const (
-	test       = "test"
-	develop    = "develop"
-	production = "production"
-)
-
-var (
-	// ErrDataNotFound error for data not found
-	ErrDataNotFound = errors.New("oncekv: data not found")
-)
-
-// Envroinment for application envroinment
-type Envroinment string
-
-// IsProduction returns if the env equals to production
-func (e Envroinment) IsProduction() bool {
-	return e == production
-}
-
-// IsDevelop returns if the env equals to develop
-func (e Envroinment) IsDevelop() bool {
-	return e == develop
-}
-
-// IsTest returns if the env equals to develop
-func (e Envroinment) IsTest() bool {
-	return e == test
-}
-
-var env = develop
-var root = ""
-
-// Env returns the env
-func Env() Envroinment {
-	return Envroinment(env)
-}
+var root string
 
 // Root returns the root path of oncekv
 func Root() string {
 	return root
 }
 
-// Configuration defines configuration
-type Configuration struct {
-	LogOut                  io.Writer
-	EtcdEndpoints           []string
-	OncekvMetaRefreshPeroid time.Duration
-	HTTPRequestTimeout      time.Duration
-	IdealResponseDuration   time.Duration
-	CacheBytes              int64
-	CacheMasterAddr         string
-	// RaftNodesKey for raft ndoes store key
-	RaftNodesKey string
-	// CacheNodesKey for cache nodes store key
-	CacheNodesKey string
-	AdminAddr     string
+// Env for application envroinment
+type Env string
 
-	RaftKey string
+// IsProduction returns if the env equals to production
+func (e Env) IsProduction() bool {
+	return e == "production"
 }
 
-func newDefaultConfig() Configuration {
-	return Configuration{
-		LogOut:                  os.Stdout,
-		EtcdEndpoints:           []string{"127.0.0.1:2379"},
-		OncekvMetaRefreshPeroid: time.Second,
-		HTTPRequestTimeout:      time.Millisecond * 100,
-		IdealResponseDuration:   time.Millisecond * 50,
-		CacheBytes:              1 << 20,
-		CacheMasterAddr:         "127.0.0.1:5550",
-		RaftNodesKey:            "oncekv.db.nodes",
-		CacheNodesKey:           "oncekv.cache.nodes",
-		RaftKey:                 "oncekv.nodes.http.adrr",
-		AdminAddr:               "127.0.0.1:5546",
-	}
+// IsDevelop returns if the env equals to develop
+func (e Env) IsDevelop() bool {
+	return e == "develop"
 }
 
-// Config returns the Configuration based on envroinment
-func Config() Configuration {
-
-	switch env {
-	case productionEnv:
-		return Configuration{
-			LogOut:                  os.Stdout,
-			OncekvMetaRefreshPeroid: time.Second,
-			HTTPRequestTimeout:      time.Millisecond * 100,
-			IdealResponseDuration:   time.Millisecond * 50,
-			CacheBytes:              1 << 32,
-			CacheMasterAddr:         "127.0.0.1:5550",
-			RaftNodesKey:            "oncekv.db.nodes",
-			CacheNodesKey:           "oncekv.cache.nodes",
-			RaftKey:                 "oncekv.nodes.http.adrr",
-			AdminAddr:               "127.0.0.1:5546",
-		}
-	case developEnv:
-		return newDefaultConfig()
-	default:
-		return newDefaultConfig()
-	}
+// IsTest returns if the env equals to develop
+func (e Env) IsTest() bool {
+	return e == "test"
 }
+
+// Config for config
+var Config = struct {
+	Env  Env `default:"develop" env:"ONCEKV_ENV"`
+	Root string
+
+	HTTPRequestTimeout    time.Duration `default:"100000000" default:"ONCEKV_HTTP_REQUEST_TIMEOUT"`
+	IdealResponseDuration time.Duration `default:"50000000" default:"ONCEKV_HTTP_IDEAL_RESPONSE_DURATION"`
+
+	// etcd addrs and the the meta data key
+	EtcdEndpoints []string `default:"['127.0.0.1:2379']" env:"ONCEKV_ETCD_ADDRS"`
+	RaftKey       string   `default:"oncekv.nodes.http.adrr" env:"ONCEKV_DB_NODE_KEY"`
+
+	RaftNodesKey  string `default:"oncekv.db.nodes" env:"ONCEKV_DB_NODES_KEY"`
+	CacheNodesKey string `default:"oncekv.cache.nodes" env:"ONCEKV_CACHE_NODES_KEY"`
+
+	// cache server
+	CacheMasterAddr string `default:"127.0.0.1:5550" env:"ONCEKV_CACHE_MASTER_ADDR"`
+	// default is 10M
+	CacheBytes int64 `default:"10485760" env:"ONCEKV_CACHE_BYTES"`
+
+	// admin
+	AdminAddr string `default:"127.0.0.1:5546" env:"ONCEKV_ADMIN_ADDR"`
+
+	// TODO: choose log collecter
+	LogOut io.Writer
+}{}
 
 func init() {
-	if e := os.Getenv("ONCEKV_ENV"); e != "" {
-		env = e
-	}
-
-	if Env().IsProduction() {
-		gin.SetMode(gin.ReleaseMode)
-	}
-
 	if r := os.Getenv("GOPATH"); r != "" {
 		root = path.Join(r, "src", "github.com", "Focinfi", "oncekv")
 	} else {
 		panic("oncekv: envroinment param $GOPATH not set")
 	}
+
+	err := configor.Load(&Config, path.Join(root, "config", "config.json"))
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(Config)
 }

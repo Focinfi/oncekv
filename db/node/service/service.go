@@ -102,6 +102,7 @@ func New(httpAddr string, raftAddr string, storeDir string) *Service {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err})
 			return
 		}
+		defer conn.Close()
 
 		for {
 			select {
@@ -112,7 +113,9 @@ func New(httpAddr string, raftAddr string, storeDir string) *Service {
 					continue
 				}
 
-				conn.WriteMessage(1, b)
+				if err := conn.WriteMessage(1, b); err != nil {
+					return
+				}
 			}
 		}
 	})

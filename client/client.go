@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/Focinfi/oncekv/admin"
-	"github.com/Focinfi/oncekv/config"
 	"github.com/Focinfi/oncekv/log"
 )
 
@@ -72,7 +71,7 @@ func (c *client) setFastDB(dbURL string) {
 }
 
 func (c *client) refresh() {
-	ticker := time.NewTicker(config.Config().OncekvMetaRefreshPeroid)
+	ticker := time.NewTicker(time.Second)
 	for {
 		select {
 		case <-ticker.C:

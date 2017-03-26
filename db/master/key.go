@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	httpAddrKey = config.Config().RaftKey
+	httpAddrKey = config.Config.RaftKey
 )
 
 func httpAddrKeyOfRaftAddr(raftAddr string) string {

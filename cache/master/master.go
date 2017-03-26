@@ -27,10 +27,10 @@ const (
 )
 
 var (
-	etcdEndpoints = config.Config().EtcdEndpoints
-	defaultAddr   = config.Config().CacheMasterAddr
-	raftNodesKey  = config.Config().RaftNodesKey
-	cacheNodesKey = config.Config().CacheNodesKey
+	etcdEndpoints = config.Config.EtcdEndpoints
+	defaultAddr   = config.Config.CacheMasterAddr
+	raftNodesKey  = config.Config.RaftNodesKey
+	cacheNodesKey = config.Config.CacheNodesKey
 )
 
 // nodesMap is pairs of httpAddr/nodeAddr

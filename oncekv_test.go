@@ -25,7 +25,7 @@ func TestBasic(t *testing.T) {
 	// start cache master
 	go master.Default.Start()
 	// start cache node
-	go node.New(":55461", ":55462", config.Config().CacheMasterAddr).Start()
+	go node.New(":55461", ":55462", config.Config.CacheMasterAddr).Start()
 
 	time.Sleep(time.Second)
 	// create a single raft cluster

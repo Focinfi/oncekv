@@ -14,7 +14,7 @@ type etcd struct {
 
 func newEtcd() (*etcd, error) {
 	cli, err := clientv3.New(clientv3.Config{
-		Endpoints: config.Config().EtcdEndpoints,
+		Endpoints: config.Config.EtcdEndpoints,
 	})
 
 	if err != nil {

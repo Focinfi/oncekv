@@ -6,31 +6,31 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"sync"
 	"time"
-
-	"sort"
 
 	"github.com/Focinfi/oncekv/config"
 	"github.com/Focinfi/oncekv/db/master"
 	"github.com/Focinfi/oncekv/log"
 	"github.com/Focinfi/oncekv/meta"
+	"github.com/Focinfi/oncekv/utils/mock"
 	"github.com/Focinfi/oncekv/utils/urlutil"
 	"github.com/gin-gonic/gin"
 )
 
 const (
-	defaultHeartbeatPeriod = time.Second * 1
-	jsonHTTPHeader         = "application/json"
-	heartbeatURLFormat     = "%s/meta"
-	logPrefix              = "cache/master:"
+	jsonHTTPHeader     = "application/json"
+	heartbeatURLFormat = "%s/meta"
+	logPrefix          = "cache/master:"
 )
 
 var (
-	etcdEndpoints = config.Config.EtcdEndpoints
-	defaultAddr   = config.Config.CacheMasterAddr
-	raftNodesKey  = config.Config.RaftNodesKey
-	cacheNodesKey = config.Config.CacheNodesKey
+	defaultHeartbeatPeriod = time.Second
+	etcdEndpoints          = config.Config.EtcdEndpoints
+	defaultAddr            = config.Config.CacheMasterAddr
+	cacheNodesKey          = config.Config.CacheNodesKey
+	httpPoster             = mock.HTTPPoster(mock.HTTPPosterFunc(http.Post))
 )
 
 // nodesMap is pairs of httpAddr/nodeAddr
@@ -63,6 +63,11 @@ func (p nodesMap) nodeAddrs() []string {
 type peerParam struct {
 	Peers []string `json:"peers"`
 	DBs   []string `json:"dbs"`
+}
+
+type joinParam struct {
+	HTTPAddr string `json:"httpAddr"`
+	NodeAddr string `json:"nodeAddr"`
 }
 
 // Master for a group of caching nodes
@@ -135,10 +140,7 @@ func (m *Master) setNodesMap(peers nodesMap) {
 }
 
 func (m *Master) handleJoinNode(ctx *gin.Context) {
-	var params = &struct {
-		HTTPAddr string `json:"httpAddr"`
-		NodeAddr string `json:"nodeAddr"`
-	}{}
+	var params = &joinParam{}
 
 	err := ctx.BindJSON(params)
 	if err != nil || params.HTTPAddr == "" || params.NodeAddr == "" {
@@ -156,6 +158,7 @@ func (m *Master) handleJoinNode(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, peerParam{Peers: m.nodesMap.httpAddrs(), DBs: m.dbs})
 	m.Unlock()
+	log.DB.Infoln("join:", m.nodesMap)
 }
 
 func (m *Master) fetchNodesMap() (nodesMap, error) {
@@ -216,7 +219,7 @@ func (m *Master) sendPeers(node string, nodes []string) error {
 		return err
 	}
 
-	res, err := http.Post(fmt.Sprintf(heartbeatURLFormat, urlutil.MakeURL(node)), jsonHTTPHeader, bytes.NewReader(b))
+	res, err := httpPoster.Post(fmt.Sprintf(heartbeatURLFormat, urlutil.MakeURL(node)), jsonHTTPHeader, bytes.NewReader(b))
 
 	if err != nil {
 		return err

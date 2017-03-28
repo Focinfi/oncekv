@@ -4,12 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"reflect"
 	"testing"
 	"time"
-
-	"io/ioutil"
 
 	"github.com/Focinfi/oncekv/config"
 	"github.com/Focinfi/oncekv/utils/urlutil"

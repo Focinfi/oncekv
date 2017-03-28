@@ -2,87 +2,11 @@ package client
 
 import (
 	"fmt"
-	"io"
-	"io/ioutil"
-	"net/http"
-	"net/url"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/Focinfi/oncekv/utils/mock"
 )
-
-func hostOfURL(rawurl string) string {
-	u, err := url.Parse(rawurl)
-	if err != nil {
-		panic(fmt.Errorf("wrong url format, err: %v", err))
-	}
-
-	return u.Host
-}
-
-func httpGetterCluster(getterMap map[string]mock.HTTPGetter) mock.HTTPGetter {
-	return mock.HTTPGetterFunc(func(rawurl string) (*http.Response, error) {
-		host := hostOfURL(rawurl)
-		getter, ok := getterMap[host]
-		if !ok {
-			panic(fmt.Sprintf("client: no getter can handle %s", host))
-		}
-
-		return getter.Get(host)
-	})
-}
-
-func mockHTTPGetter(url string, response string, err error, delay time.Duration) mock.HTTPGetter {
-	return mock.HTTPGetterFunc(func(url string) (*http.Response, error) {
-		respChan := make(chan *http.Response)
-
-		go func() {
-			resp := &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       ioutil.NopCloser(strings.NewReader(response)),
-			}
-
-			time.AfterFunc(delay, func() {
-				respChan <- resp
-			})
-		}()
-
-		return <-respChan, err
-	})
-}
-
-func httpPosterCluster(posterMap map[string]mock.HTTPPoster) mock.HTTPPoster {
-	return mock.HTTPPosterFunc(func(rawurl string, contentType string, body io.Reader) (*http.Response, error) {
-		host := hostOfURL(rawurl)
-		poster, ok := posterMap[host]
-		if !ok {
-			panic(fmt.Sprintf("client: no poster can handle %s", host))
-		}
-
-		return poster.Post(host, contentType, body)
-	})
-}
-
-func mockHTTPPoster(url string, response string, err error, delay time.Duration) mock.HTTPPoster {
-	return mock.HTTPPosterFunc(func(url string, contentType string, body io.Reader) (*http.Response, error) {
-		respChan := make(chan *http.Response)
-
-		go func() {
-			resp := &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       ioutil.NopCloser(strings.NewReader(response)),
-			}
-
-			time.AfterFunc(delay, func() {
-				respChan <- resp
-			})
-		}()
-
-		return <-respChan, err
-	})
-}
 
 func defaultGetterCluster() mock.HTTPGetter {
 	cluster := map[string]mock.HTTPGetter{}
@@ -94,12 +18,12 @@ func defaultGetterCluster() mock.HTTPGetter {
 	for i, cache := range servers {
 		delay := idealReponseDuration * time.Duration(i%2)
 		fmt.Printf("%s delay=%v\n", cache, delay)
-		getter := mockHTTPGetter(cache, `{"key":"foo", "value":"bar"}`, nil, delay)
-		host := hostOfURL(cache)
+		getter := mock.MakeHTTPGetter(cache, `{"key":"foo", "value":"bar"}`, nil, delay)
+		host := mock.HostOfURL(cache)
 		cluster[host] = getter
 	}
 
-	return httpGetterCluster(cluster)
+	return mock.HTTPGetterCluster(cluster)
 }
 
 func defaultPosterCluster() mock.HTTPPoster {
@@ -107,12 +31,12 @@ func defaultPosterCluster() mock.HTTPPoster {
 	for i, db := range dbs {
 		delay := idealReponseDuration * time.Duration(i%2)
 		fmt.Printf("%s delay=%v\n", db, delay)
-		poster := mockHTTPPoster(db, "", nil, delay)
-		host := hostOfURL(db)
+		poster := mock.MakeHTTPPoster(db, "", nil, delay)
+		host := mock.HostOfURL(db)
 		cluster[host] = poster
 	}
 
-	return httpPosterCluster(cluster)
+	return mock.HTTPPosterCluster(cluster)
 }
 
 func setDefaultMockHTTP() {

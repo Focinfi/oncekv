@@ -40,6 +40,7 @@ var (
 	gorupCacheBytes = config.Config.CacheBytes
 
 	httpGetter = mock.HTTPGetter(mock.HTTPGetterFunc(http.Get))
+	httpPoster = mock.HTTPPoster(mock.HTTPPosterFunc(http.Post))
 )
 
 type masterParam struct {
@@ -171,7 +172,6 @@ func newPool(node *Node, addr string) *groupcache.HTTPPool {
 }
 
 func newGroup(n *Node, name string) *groupcache.Group {
-	// TODO: make cacheBizes to be configurable
 	return groupcache.NewGroup(name, gorupCacheBytes, groupcache.GetterFunc(n.fetchData))
 }
 
@@ -187,7 +187,7 @@ func (n *Node) join() {
 
 	// post join
 	addr := urlutil.MakeURL(n.masterAdrr)
-	res, err := http.Post(fmt.Sprintf(masterJoinURLFormat, addr), jsonHTTPHeader, bytes.NewReader(b))
+	res, err := httpPoster.Post(fmt.Sprintf(masterJoinURLFormat, addr), jsonHTTPHeader, bytes.NewReader(b))
 	if err != nil {
 		panic(err)
 	}

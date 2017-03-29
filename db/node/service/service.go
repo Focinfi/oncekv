@@ -92,6 +92,9 @@ func New(httpAddr string, raftAddr string, storeDir string) *Service {
 	s.GET("/i/key/:key", s.handleGet)
 	s.POST("/key", s.handleSet)
 	s.POST("/join", s.handleJoin)
+	s.GET("/ping", func(ctx *gin.Context) {
+		ctx.String(http.StatusOK, "pong")
+	})
 	s.GET("/stats", func(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, s.store.Stats())
 	})

@@ -2,6 +2,7 @@ package master
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sort"
 	"sync"
@@ -20,7 +21,9 @@ const (
 )
 
 var (
-	raftNodesKey = config.Config.RaftNodesKey
+	heartbeatPeriod = time.Second
+	raftNodesKey    = config.Config.RaftNodesKey
+	httpGetter      = mock.HTTPGetter(mock.HTTPGetterFunc(http.Get))
 )
 
 // Master is the master of a raft group
@@ -36,7 +39,7 @@ func (m *Master) Peers() ([]string, error) {
 
 // Start starts manage peers
 func (m *Master) Start() {
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(heartbeatPeriod)
 	for {
 		select {
 		case <-ticker.C:
@@ -62,13 +65,23 @@ func (m *Master) heartbeat() {
 		go func(url string) {
 			defer wg.Done()
 
-			_, err := m.getter.Get(urlutil.MakeURL(url))
+			var shouldRemove bool
+			resp, err := httpGetter.Get(fmt.Sprintf("%s/ping", urlutil.MakeURL(url)))
 			if err != nil {
+				log.DB.Error(err)
+				shouldRemove = true
+
+			} else if resp.StatusCode != http.StatusOK {
+				log.DB.Errorf("%s peer[%s] response code: %d\n", logPerfix, url, resp.StatusCode)
+				resp.Body.Close()
+				shouldRemove = true
+			}
+
+			if shouldRemove {
 				log.DB.Error(err)
 				mux.Lock()
 				defer mux.Unlock()
 				toRemove = append(toRemove, url)
-				return
 			}
 		}(peer)
 	}
@@ -156,7 +169,6 @@ var Default *Master
 
 func init() {
 	Default = &Master{
-		meta:   meta.Default,
-		getter: mock.HTTPGetterFunc(http.Get),
+		meta: meta.Default,
 	}
 }

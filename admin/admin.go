@@ -3,9 +3,8 @@ package admin
 import (
 	"encoding/json"
 	"net/http"
-	"time"
-
 	"reflect"
+	"time"
 
 	cache "github.com/Focinfi/oncekv/cache/master"
 	"github.com/Focinfi/oncekv/config"

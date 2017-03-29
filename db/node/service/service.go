@@ -3,19 +3,18 @@
 package service
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
 	"time"
 
-	"encoding/json"
-
-	"bytes"
-
 	"github.com/Focinfi/oncekv/db/master"
 	"github.com/Focinfi/oncekv/db/node/store"
 	"github.com/Focinfi/oncekv/log"
 	"github.com/Focinfi/oncekv/raftboltdb"
+	"github.com/Focinfi/oncekv/utils/mock"
 	"github.com/Focinfi/oncekv/utils/urlutil"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -26,8 +25,17 @@ const (
 	joinURLFormat = "%s/join"
 )
 
+var (
+	httpPoster = mock.HTTPPoster(mock.HTTPPosterFunc(http.Post))
+)
+
 type joinParams struct {
 	Addr string `json:"addr"`
+}
+
+type kvResp struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
 }
 
 // Store is the interface Raft-backed key-value stores must implement.
@@ -180,7 +188,7 @@ func (s *Service) handleGet(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"key": key, "value": val})
+	ctx.JSON(http.StatusOK, kvResp{Key: key, Value: val})
 }
 
 func (s *Service) handleSet(ctx *gin.Context) {
@@ -258,7 +266,7 @@ func (s *Service) tryToJoin(peers []string) error {
 		}
 
 		url := fmt.Sprintf(joinURLFormat, urlutil.MakeURL(peer))
-		res, err := http.Post(url, "application/json", bytes.NewReader(b))
+		res, err := httpPoster.Post(url, "application/json", bytes.NewReader(b))
 		if err != nil {
 			log.DB.Error(err)
 			continue

@@ -28,6 +28,9 @@ func TestNode(t *testing.T) {
 	node.store = store
 	go node.Start()
 
+	// wait a moment
+	time.Sleep(time.Millisecond * 10)
+
 	// POST /key
 	param := map[string]string{"key": "foo", "value": "bar"}
 	b, err := json.Marshal(param)

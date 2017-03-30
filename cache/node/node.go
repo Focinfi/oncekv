@@ -197,7 +197,7 @@ func (n *Node) join() {
 		panic(fmt.Sprintf("%s failed to join into master", logPrefix))
 	}
 
-	// read reponse
+	// read response
 	b, err = ioutil.ReadAll(response.Body)
 	if err != nil {
 		panic(err)

@@ -37,7 +37,7 @@ func (s *Store) Add(key, value string) error {
 	s.Lock()
 	defer s.Unlock()
 	if _, ok := s.data[key]; ok {
-		return fmt.Errorf("duplicated")
+		return fmt.Errorf("duplicate")
 	}
 
 	s.data[key] = value

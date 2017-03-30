@@ -115,6 +115,9 @@ func TestJoin(t *testing.T) {
 	master := New(masterAddr)
 	go master.Start()
 
+	// wait a moment
+	time.Sleep(time.Millisecond * 10)
+
 	param := joinParam{HTTPAddr: newNodeHTTP, NodeAddr: newNodeInernal}
 	b, err = json.Marshal(param)
 	if err != nil {

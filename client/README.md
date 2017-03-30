@@ -1,6 +1,6 @@
 ### oncekv Client
 
-A HTTP Client for oncekv.
+A HTTP Client for [oncekv](https://github.com/Focinfi/oncekv).
 
 #### Design
 1. Fast fail.

@@ -1,18 +1,18 @@
-# oncekv
+## oncekv
 
-> oncekv admin page
+simple `oncekv` admin page, powered by [vuejs](https://github.com/vuejs/vue) and [element](https://github.com/ElemeFE/element).
 
-## Build Setup
+### Build Setup
 
 ``` bash
 # install dependencies
 npm install
 
+# export the admin server address
+export ONCEKV_ADMIN_ADDR='127.0.0.1:5546'
 # serve with hot reload at localhost:8080
-ONCEKV_ADMIN_ADDR='127.0.0.1:5546' npm run dev
+npm run dev
 
 # build for production with minification
 npm run build
 ```
-
-For detailed explanation on how things work, consult the [docs for vue-loader](http://vuejs.github.io/vue-loader).

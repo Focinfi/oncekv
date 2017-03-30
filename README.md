@@ -22,4 +22,4 @@ At the same time, limitaion gives us chances to improve performance but still ea
 
 ![admin](http://on78mzb4g.bkt.clouddn.com/oncekv-admin.jpeg.webp)
 
-Powered by [vuejs](https://github.com/vuejs) and [element](https://github.com/ElemeFE/element)
+Powered by [vuejs](https://github.com/vuejs/vue) and [element](https://github.com/ElemeFE/element)

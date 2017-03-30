@@ -1,9 +1,9 @@
 package service
 
 const (
-	// OK for successful reponse
+	// OK for successful response
 	OK = 1000
-	// ParamsError for params error reponse
+	// ParamsError for params error response
 	ParamsError = 1001
 	// KeyNotFound for key/value no found response
 	KeyNotFound = 1002

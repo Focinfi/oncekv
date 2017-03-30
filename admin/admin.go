@@ -14,7 +14,16 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var defaulAddr = config.Config.AdminAddr
+var (
+	defaulAddr = config.Config.AdminAddr
+	wsupgrader = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	}
+)
 
 // Admin for oncekv admin
 type Admin struct {
@@ -33,108 +42,104 @@ func (a *Admin) Start() {
 
 func (a *Admin) newServer() *gin.Engine {
 	engine := gin.Default()
-	engine.GET("/caches", func(ctx *gin.Context) {
-		peers, err := a.CacheMaster.Peers()
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err})
-			return
-		}
+	engine.GET("/caches", a.handleCaches)
+	engine.GET("/dbs", a.handleDBs)
+	engine.GET("/ws/caches", a.handleWebSocketCaches)
+	engine.GET("/ws/dbs", a.handleWebSocketDBs)
+	return engine
+}
 
-		ctx.JSON(http.StatusOK, peers)
-	})
-
-	engine.GET("/dbs", func(ctx *gin.Context) {
-		peers, err := a.DBMaster.Peers()
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err})
-			return
-		}
-
-		ctx.JSON(http.StatusOK, peers)
-	})
-
-	var wsupgrader = websocket.Upgrader{
-		ReadBufferSize:  1024,
-		WriteBufferSize: 1024,
-		CheckOrigin: func(r *http.Request) bool {
-			return true
-		},
+func (a *Admin) handleCaches(ctx *gin.Context) {
+	peers, err := a.CacheMaster.Peers()
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
 	}
 
-	engine.GET("/ws/caches", func(ctx *gin.Context) {
-		conn, err := wsupgrader.Upgrade(ctx.Writer, ctx.Request, nil)
-		if err != nil {
-			log.Internal.Error(err)
-			return
+	ctx.JSON(http.StatusOK, peers)
+}
+
+func (a *Admin) handleDBs(ctx *gin.Context) {
+	peers, err := a.DBMaster.Peers()
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, peers)
+}
+
+func (a *Admin) handleWebSocketCaches(ctx *gin.Context) {
+	conn, err := wsupgrader.Upgrade(ctx.Writer, ctx.Request, nil)
+	if err != nil {
+		log.Internal.Error(err)
+		return
+	}
+	defer conn.Close()
+
+	peers := []string{}
+
+	for {
+		select {
+		case <-time.After(time.Second):
+			newPeers, err := a.CacheMaster.Peers()
+			if err != nil {
+				log.DB.Error(err)
+				continue
+			}
+
+			if reflect.DeepEqual(newPeers, peers) {
+				continue
+			}
+
+			b, err := json.Marshal(newPeers)
+			if err != nil {
+				log.DB.Error(err)
+				continue
+			}
+
+			peers = newPeers
+			conn.WriteMessage(1, b)
 		}
-		defer conn.Close()
+	}
+}
 
-		peers := []string{}
+func (a *Admin) handleWebSocketDBs(ctx *gin.Context) {
+	conn, err := wsupgrader.Upgrade(ctx.Writer, ctx.Request, nil)
+	if err != nil {
+		log.Internal.Error(err)
+		return
+	}
+	defer conn.Close()
 
-		for {
-			select {
-			case <-time.After(time.Second):
-				newPeers, err := a.CacheMaster.Peers()
-				if err != nil {
-					log.DB.Error(err)
-					continue
-				}
+	peers := []string{}
 
-				if reflect.DeepEqual(newPeers, peers) {
-					continue
-				}
+	for {
+		select {
+		case <-time.After(time.Second):
+			newPeers, err := a.DBMaster.Peers()
+			if err != nil {
+				log.DB.Error(err)
+				continue
+			}
+			log.DB.Infoln("newPeers", newPeers)
 
-				b, err := json.Marshal(newPeers)
-				if err != nil {
-					log.DB.Error(err)
-					continue
-				}
+			if reflect.DeepEqual(newPeers, peers) {
+				continue
+			}
 
-				peers = newPeers
-				conn.WriteMessage(1, b)
+			b, err := json.Marshal(newPeers)
+			if err != nil {
+				log.DB.Error(err)
+				continue
+			}
+
+			peers = newPeers
+			if err := conn.WriteMessage(1, b); err != nil {
+				return
 			}
 		}
-	})
-
-	engine.GET("/ws/dbs", func(ctx *gin.Context) {
-		conn, err := wsupgrader.Upgrade(ctx.Writer, ctx.Request, nil)
-		if err != nil {
-			log.Internal.Error(err)
-			return
-		}
-		defer conn.Close()
-
-		peers := []string{}
-
-		for {
-			select {
-			case <-time.After(time.Second):
-				newPeers, err := a.DBMaster.Peers()
-				if err != nil {
-					log.DB.Error(err)
-					continue
-				}
-				log.DB.Infoln("newPeers", newPeers)
-
-				if reflect.DeepEqual(newPeers, peers) {
-					continue
-				}
-
-				b, err := json.Marshal(newPeers)
-				if err != nil {
-					log.DB.Error(err)
-					continue
-				}
-
-				peers = newPeers
-				if err := conn.WriteMessage(1, b); err != nil {
-					return
-				}
-			}
-		}
-	})
-
-	return engine
+	}
 }
 
 // Default act as a default Admin

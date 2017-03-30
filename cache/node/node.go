@@ -187,18 +187,18 @@ func (n *Node) join() {
 
 	// post join
 	addr := urlutil.MakeURL(n.masterAdrr)
-	res, err := httpPoster.Post(fmt.Sprintf(masterJoinURLFormat, addr), jsonHTTPHeader, bytes.NewReader(b))
+	response, err := httpPoster.Post(fmt.Sprintf(masterJoinURLFormat, addr), jsonHTTPHeader, bytes.NewReader(b))
 	if err != nil {
 		panic(err)
 	}
-	defer res.Body.Close()
+	defer response.Body.Close()
 
-	if res.StatusCode != http.StatusOK {
+	if response.StatusCode != http.StatusOK {
 		panic(fmt.Sprintf("%s failed to join into master", logPrefix))
 	}
 
 	// read reponse
-	b, err = ioutil.ReadAll(res.Body)
+	b, err = ioutil.ReadAll(response.Body)
 	if err != nil {
 		panic(err)
 	}

@@ -26,6 +26,7 @@ const (
 )
 
 var (
+	// defaultHeartbeatPeriod = time.Second
 	defaultHeartbeatPeriod = time.Second
 	etcdEndpoints          = config.Config.EtcdEndpoints
 	defaultAddr            = config.Config.CacheMasterAddr

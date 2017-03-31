@@ -179,7 +179,7 @@ func (node *Node) join() {
 	// build join param
 	b, err := json.Marshal(map[string]string{
 		"httpAddr": node.httpAddr,
-		"groupcacheAddr": node.nodeAddr,
+		"nodeAddr": node.nodeAddr,
 	})
 	if err != nil {
 		panic(err)
@@ -194,7 +194,7 @@ func (node *Node) join() {
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
-		panic(fmt.Sprintf("%s failed to join into master", logPrefix))
+		panic(fmt.Sprintf("%s failed to join into master, response status code=%d", logPrefix, response.StatusCode))
 	}
 
 	// read response

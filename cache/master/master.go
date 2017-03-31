@@ -80,7 +80,7 @@ type Master struct {
 	server *gin.Engine
 	addr   string
 
-	// databse store
+	// database store
 	meta        meta.Meta
 	nodesMapKey string
 }

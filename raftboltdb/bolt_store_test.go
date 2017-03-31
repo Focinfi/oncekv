@@ -38,10 +38,10 @@ func testRaftLog(idx uint64, data string) *raft.Log {
 func TestBoltStore_Implements(t *testing.T) {
 	var store interface{} = &BoltStore{}
 	if _, ok := store.(raft.StableStore); !ok {
-		t.Fatalf("BoltStore does not implement raft.StableStore")
+		t.Fatal("BoltStore does not implement raft.StableStore")
 	}
 	if _, ok := store.(raft.LogStore); !ok {
-		t.Fatalf("BoltStore does not implement raft.LogStore")
+		t.Fatal("BoltStore does not implement raft.LogStore")
 	}
 }
 
@@ -75,7 +75,7 @@ func TestBoltOptionsTimeout(t *testing.T) {
 			t.Errorf("Expected timeout error but got %v", err)
 		}
 	case <-time.After(5 * time.Second):
-		t.Errorf("Gave up waiting for timeout response")
+		t.Error("Gave up waiting for timeout response")
 	}
 }
 
@@ -354,10 +354,10 @@ func TestBoltStore_DeleteRange(t *testing.T) {
 
 	// Ensure the logs were deleted
 	if err := store.GetLog(1, new(raft.Log)); err != raft.ErrLogNotFound {
-		t.Fatalf("should have deleted log1")
+		t.Fatal("should have deleted log1")
 	}
 	if err := store.GetLog(2, new(raft.Log)); err != raft.ErrLogNotFound {
-		t.Fatalf("should have deleted log2")
+		t.Fatal("should have deleted log2")
 	}
 }
 

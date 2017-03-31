@@ -16,8 +16,8 @@ import (
 )
 
 var (
-	masterAddr = config.Config.CacheMasterAddr
-	dbsKey     = config.Config.RaftNodesKey
+	testAddr = config.Config.CacheMasterAddr
+	dbsKey   = config.Config.RaftNodesKey
 )
 
 func testNodes() nodesMap {
@@ -32,16 +32,16 @@ func TestNew(t *testing.T) {
 	}
 
 	meta.Default.Put(cacheNodesKey, string(b))
-	master := New(masterAddr)
-	t.Logf("meta: %T, env=%v\n", master.meta, config.Config.Env)
-	if !reflect.DeepEqual(master.nodesMap, nodes) {
-		t.Errorf("can not init nodesMap, expect %v, got %v\n", nodes, master.nodesMap)
+	m := New(testAddr)
+	t.Logf("meta: %T, env=%v\n", m.meta, config.Config.Env)
+	if !reflect.DeepEqual(m.nodesMap, nodes) {
+		t.Errorf("can not init nodesMap, expect %v, got %v\n", nodes, m.nodesMap)
 	}
 }
 
 func TestWatch(t *testing.T) {
 	nodes := testNodes()
-	master := New(masterAddr)
+	m := New(testAddr)
 
 	// update meta
 	dbs := []string{"127.0.0.1:55003", "127.0.0.1:55004"}
@@ -54,13 +54,13 @@ func TestWatch(t *testing.T) {
 	// mock the watch period
 	mock.DefaultWatchPeriod = time.Millisecond * 10
 	// start watch
-	go master.meta.WatchModify(master.nodesMapKey, func() { master.syncDBs() })
+	go m.meta.WatchModify(m.nodesMapKey, func() { m.syncDBs() })
 
 	// wait a second
 	time.Sleep(time.Microsecond * 15)
 
-	if !reflect.DeepEqual(master.nodesMap, nodes) {
-		t.Errorf("can not watch nodesMap, expect %v, got %v\n", nodes, master.nodesMap)
+	if !reflect.DeepEqual(m.nodesMap, nodes) {
+		t.Errorf("can not watch nodesMap, expect %v, got %v\n", nodes, m.nodesMap)
 	}
 }
 
@@ -79,28 +79,28 @@ func TestHearbeat(t *testing.T) {
 		"127.0.0.1:55005": mock.MakeHTTPPoster("127.0.0.1:55005", "", nil, 0),
 		"127.0.0.1:55001": mock.MakeHTTPPoster("127.0.0.1:55001", "", fmt.Errorf("broken"), 0),
 	})
-	master := New(masterAddr)
+	m := New(testAddr)
 
 	// mock the heartbeat period
 	defaultHeartbeatPeriod = time.Millisecond * 10
 	// start heartbeat
-	go master.heartbeat()
+	go m.heartbeat()
 
 	// wait a second
 	time.Sleep(time.Millisecond * 15)
 
-	if _, ok := master.nodesMap["127.0.0.1:55005"]; !ok {
-		t.Errorf("can not remove the alive node")
+	if _, ok := m.nodesMap["127.0.0.1:55005"]; !ok {
+		t.Error("can not remove the alive node")
 	}
 
-	if _, ok := master.nodesMap["127.0.0.1:55001"]; ok {
-		t.Errorf("should remove the dead node, current is: %v\n", master.nodesMap)
+	if _, ok := m.nodesMap["127.0.0.1:55001"]; ok {
+		t.Errorf("should remove the dead node, current is: %v\n", m.nodesMap)
 	}
 }
 
 func TestJoin(t *testing.T) {
 	newNodeHTTP := "127.0.0.1:55007"
-	newNodeInernal := "127.0.0.1:55008"
+	newNodeInternal := "127.0.0.1:55008"
 	// init nodes
 	nodes := testNodes()
 	b, err := json.Marshal(nodes)
@@ -112,19 +112,19 @@ func TestJoin(t *testing.T) {
 	// new node server mock
 	httpPoster = mock.MakeHTTPPoster(newNodeHTTP, "", nil, 0)
 
-	master := New(masterAddr)
-	go master.Start()
+	m := New(testAddr)
+	go m.Start()
 
 	// wait a moment
 	time.Sleep(time.Millisecond * 10)
 
-	param := joinParam{HTTPAddr: newNodeHTTP, NodeAddr: newNodeInernal}
+	param := joinParam{HTTPAddr: newNodeHTTP, NodeAddr: newNodeInternal}
 	b, err = json.Marshal(param)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	url := fmt.Sprintf("%s/join", urlutil.MakeURL(masterAddr))
+	url := fmt.Sprintf("%s/join", urlutil.MakeURL(testAddr))
 	_, err = http.Post(url, jsonHTTPHeader, bytes.NewReader(b))
 	if err != nil {
 		t.Errorf("can not handle POST /join, err: %v\n", err)
@@ -133,7 +133,7 @@ func TestJoin(t *testing.T) {
 	// wait a moment
 	time.Sleep(time.Millisecond * 10)
 
-	if got, expect := master.nodesMap[urlutil.MakeURL(newNodeHTTP)], urlutil.MakeURL(newNodeInernal); got != expect {
+	if got, expect := m.nodesMap[urlutil.MakeURL(newNodeHTTP)], urlutil.MakeURL(newNodeInternal); got != expect {
 		t.Errorf("can not join a node, expect %v, got: %v\n", expect, got)
 	}
 }

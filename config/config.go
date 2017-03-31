@@ -17,7 +17,7 @@ func Root() string {
 	return root
 }
 
-// Env for application envroinment
+// Env for application environment
 type Env string
 
 // IsProduction returns if the env equals to production
@@ -58,7 +58,7 @@ var Config = struct {
 	// admin
 	AdminAddr string `default:"127.0.0.1:5546" env:"ONCEKV_ADMIN_ADDR"`
 
-	// TODO: choose log collecter
+	// TODO: choose log collector
 	LogOut io.Writer
 }{}
 

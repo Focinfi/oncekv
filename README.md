@@ -8,7 +8,7 @@ Why limit the set time?
 
 Cause we design oncekv for the scenarios like once a key set, it will never be changed, for example, a versioned cache file database.
 
-At the same time, limitaion gives us chances to improve performance but still easily to scale. 
+At the same time, limitation gives us chances to improve performance but still easily to scale.
 
 ### Design
 

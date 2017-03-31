@@ -39,7 +39,7 @@ func TestMaster(t *testing.T) {
 	heartbeatPeriod = time.Millisecond * 10
 	go Default.Start()
 
-	// wait heartbeat peroid
+	// wait heartbeat period
 	time.Sleep(time.Millisecond * 15)
 
 	if peers, err := Default.Peers(); err != nil {
@@ -53,7 +53,7 @@ func TestMaster(t *testing.T) {
 	// mock again
 	httpGetter = mock.HTTPGetterCluster(getterMap)
 
-	// wait a heartbeat peroid
+	// wait a heartbeat period
 	time.Sleep(time.Millisecond * 15)
 
 	if peers, err := Default.Peers(); err != nil {

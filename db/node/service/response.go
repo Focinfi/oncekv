@@ -9,8 +9,8 @@ const (
 	KeyNotFound = 1002
 	// KeyDuplicate for key/value duplicate response
 	KeyDuplicate = 1003
-	// InernalError for internal error
-	InernalError = 1004
+	// InternalError for internal error
+	InternalError = 1004
 	// NotLeaderError for not leader error
 	NotLeaderError = 1005
 )
@@ -47,7 +47,7 @@ var StatusKeyDuplicate = Status{
 
 // StatusInternalError for internal error
 var StatusInternalError = Status{
-	Code:    InernalError,
+	Code:    InternalError,
 	Message: "internal error",
 }
 

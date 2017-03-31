@@ -16,8 +16,7 @@ import (
 )
 
 const (
-	statsURLFormat = "%s/stats"
-	logPerfix      = "db/master:"
+	logPrefix = "db/master:"
 )
 
 var (
@@ -72,7 +71,7 @@ func (m *Master) heartbeat() {
 				shouldRemove = true
 
 			} else if resp.StatusCode != http.StatusOK {
-				log.DB.Errorf("%s peer[%s] response code: %d\n", logPerfix, url, resp.StatusCode)
+				log.DB.Errorf("%s peer[%s] response code: %d\n", logPrefix, url, resp.StatusCode)
 				resp.Body.Close()
 				shouldRemove = true
 			}
@@ -87,7 +86,7 @@ func (m *Master) heartbeat() {
 	}
 
 	wg.Wait()
-	log.Biz.Infoln(logPerfix, "toRemove:", toRemove)
+	log.Biz.Infoln(logPrefix, "toRemove:", toRemove)
 	if len(toRemove) > 0 {
 		go m.removeNodes(toRemove)
 	}

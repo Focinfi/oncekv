@@ -33,14 +33,22 @@ const (
 var (
 	// ErrDataNotFound for not found data error
 	ErrDataNotFound = fmt.Errorf("%s data not found", logPrefix)
-	// ErrDatabaseQueryTimeout for upderlying data query timeout error
+	// ErrDatabaseQueryTimeout for underlying data query timeout error
 	ErrDatabaseQueryTimeout = fmt.Errorf("%s upderlying data query timeout", logPrefix)
 
 	dbQueryTimeout  = config.Config.HTTPRequestTimeout
-	gorupCacheBytes = config.Config.CacheBytes
+	groupcacheBytes = config.Config.CacheBytes
 
 	httpGetter = mock.HTTPGetter(mock.HTTPGetterFunc(http.Get))
 	httpPoster = mock.HTTPPoster(mock.HTTPPosterFunc(http.Post))
+
+	wsUpgrader = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	}
 )
 
 type masterParam struct {
@@ -48,18 +56,18 @@ type masterParam struct {
 	DBs   []string `json:"dbs"`
 }
 
-// Node for one groupcahe server
+// Node for one groupcache server
 type Node struct {
 	// meta
 	sync.RWMutex // protect updating for dbs and peers
-	// upderlying databse
+	// underlying database
 	dbs []string
 	// fast db
 	fastDB string
 	// cache peers
 	peers []string
 	// master url for update meta(dbs and peers)
-	masterAdrr string
+	masterAddr string
 
 	// node http server
 	*gin.Engine
@@ -74,97 +82,89 @@ type Node struct {
 // New returns a new Node with the given info
 func New(httpAddr string, nodeAddr string, masterAddr string) *Node {
 	cache := &Node{
-		masterAdrr: strings.TrimSuffix(masterAddr, "/"),
+		masterAddr: strings.TrimSuffix(masterAddr, "/"),
 		httpAddr:   httpAddr,
 		nodeAddr:   nodeAddr,
+		pool:       newPool(nodeAddr),
 	}
 
 	cache.Engine = newServer(cache)
-	cache.pool = newPool(cache, nodeAddr)
 	cache.group = newGroup(cache, defaultGroup)
 
 	return cache
 }
 
 // Start starts the server
-func (n *Node) Start() {
+func (node *Node) Start() {
 	// try to get meta data
-	n.join()
+	node.join()
 
 	// start the groupcache server
 	go func() {
-		log.DB.Fatal(logPrefix, http.ListenAndServe(n.nodeAddr, n.pool))
+		log.DB.Fatal(logPrefix, http.ListenAndServe(node.nodeAddr, node.pool))
 	}()
 
 	// start the node server
-	n.Run(n.httpAddr)
+	node.Run(node.httpAddr)
 }
 
-func newServer(c *Node) *gin.Engine {
+func newServer(node *Node) *gin.Engine {
 	server := gin.Default()
-	server.POST("/meta", c.handleMeta)
-
+	server.POST("/meta", node.handleMeta)
 	server.GET("/stats", func(ctx *gin.Context) {
-		ctx.JSON(http.StatusOK, c.group.Stats)
+		ctx.JSON(http.StatusOK, node.group.Stats)
 	})
-
-	server.GET("/key/:key", func(ctx *gin.Context) {
-		result := &groupcache.ByteView{}
-		log.DB.Infoln("Start Get")
-		err := c.group.Get(ctx.Request.Context(), ctx.Param("key"), groupcache.ByteViewSink(result))
-		log.DB.Infoln("End Get")
-		if err == ErrDataNotFound {
-			ctx.JSON(http.StatusNotFound, nil)
-			return
-		}
-
-		if err != nil {
-			log.DB.Error(logPrefix, err)
-			ctx.JSON(http.StatusInternalServerError, nil)
-			return
-		}
-
-		ctx.Writer.WriteHeader(http.StatusOK)
-		ctx.Writer.Header()["Content-Type"] = []string{"application/json; charset=utf-8"}
-		ctx.Writer.Write(result.ByteSlice())
-	})
-
-	var wsupgrader = websocket.Upgrader{
-		ReadBufferSize:  1024,
-		WriteBufferSize: 1024,
-		CheckOrigin: func(r *http.Request) bool {
-			return true
-		},
-	}
-
-	server.GET("/ws/stats", func(ctx *gin.Context) {
-		conn, err := wsupgrader.Upgrade(ctx.Writer, ctx.Request, nil)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err})
-			return
-		}
-		defer conn.Close()
-
-		for {
-			select {
-			case <-time.After(time.Second):
-				b, err := json.Marshal(c.group.Stats)
-				if err != nil {
-					log.DB.Error(err)
-					continue
-				}
-
-				if err := conn.WriteMessage(1, b); err != nil {
-					return
-				}
-			}
-		}
-	})
-
+	server.GET("/key/:key", node.handleGetKey)
+	server.GET("/ws/stats", node.handleStatsWebSocket)
 	return server
 }
 
-func newPool(node *Node, addr string) *groupcache.HTTPPool {
+func (node *Node) handleStatsWebSocket(ctx *gin.Context) {
+	conn, err := wsUpgrader.Upgrade(ctx.Writer, ctx.Request, nil)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
+	}
+	defer conn.Close()
+
+	for {
+		select {
+		case <-time.After(time.Second):
+			b, err := json.Marshal(node.group.Stats)
+			if err != nil {
+				log.DB.Error(err)
+				continue
+			}
+
+			if err := conn.WriteMessage(1, b); err != nil {
+				return
+			}
+		}
+	}
+}
+
+func (node *Node) handleGetKey(ctx *gin.Context) {
+	result := &groupcache.ByteView{}
+	log.DB.Infoln("Start Get")
+	err := node.group.Get(ctx.Request.Context(), ctx.Param("key"), groupcache.ByteViewSink(result))
+	log.DB.Infoln("End Get")
+	if err == ErrDataNotFound {
+		ctx.JSON(http.StatusNotFound, nil)
+		return
+	}
+
+	if err != nil {
+		log.DB.Error(logPrefix, err)
+		ctx.JSON(http.StatusInternalServerError, nil)
+		return
+	}
+
+	ctx.Writer.WriteHeader(http.StatusOK)
+	ctx.Writer.Header()["Content-Type"] = []string{"application/json; charset=utf-8"}
+	ctx.Writer.Write(result.ByteSlice())
+}
+
+func newPool(addr string) *groupcache.HTTPPool {
 	return groupcache.NewHTTPPoolOpts(urlutil.MakeURL(addr),
 		&groupcache.HTTPPoolOptions{
 			BasePath: basePath,
@@ -172,21 +172,21 @@ func newPool(node *Node, addr string) *groupcache.HTTPPool {
 }
 
 func newGroup(n *Node, name string) *groupcache.Group {
-	return groupcache.NewGroup(name, gorupCacheBytes, groupcache.GetterFunc(n.fetchData))
+	return groupcache.NewGroup(name, groupcacheBytes, groupcache.GetterFunc(n.fetchData))
 }
 
-func (n *Node) join() {
+func (node *Node) join() {
 	// build join param
 	b, err := json.Marshal(map[string]string{
-		"httpAddr": n.httpAddr,
-		"nodeAddr": n.nodeAddr,
+		"httpAddr": node.httpAddr,
+		"groupcacheAddr": node.nodeAddr,
 	})
 	if err != nil {
 		panic(err)
 	}
 
 	// post join
-	addr := urlutil.MakeURL(n.masterAdrr)
+	addr := urlutil.MakeURL(node.masterAddr)
 	response, err := httpPoster.Post(fmt.Sprintf(masterJoinURLFormat, addr), jsonHTTPHeader, bytes.NewReader(b))
 	if err != nil {
 		panic(err)
@@ -208,16 +208,16 @@ func (n *Node) join() {
 		panic(err)
 	}
 
-	n.Lock()
-	defer n.Unlock()
+	node.Lock()
+	defer node.Unlock()
 
 	// update meta
-	n.pool.Set(params.Peers...)
-	n.peers = params.Peers
-	n.dbs = params.DBs
+	node.pool.Set(params.Peers...)
+	node.peers = params.Peers
+	node.dbs = params.DBs
 }
 
-func (n *Node) handleMeta(ctx *gin.Context) {
+func (node *Node) handleMeta(ctx *gin.Context) {
 	params := masterParam{}
 	if err := ctx.BindJSON(&params); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -227,51 +227,51 @@ func (n *Node) handleMeta(ctx *gin.Context) {
 	sort.StringSlice(params.Peers).Sort()
 	sort.StringSlice(params.DBs).Sort()
 
-	n.RLock()
-	if reflect.DeepEqual(n.peers, params.Peers) &&
-		reflect.DeepEqual(n.dbs, params.DBs) {
+	node.RLock()
+	if reflect.DeepEqual(node.peers, params.Peers) &&
+		reflect.DeepEqual(node.dbs, params.DBs) {
 
-		n.RUnlock()
+		node.RUnlock()
 		// return if no changes
 		ctx.JSON(http.StatusOK, nil)
 		return
 	}
-	n.RUnlock()
+	node.RUnlock()
 
-	log.Biz.Infof("%s [peers] local:%#v, remote: %#v\n", logPrefix, n.peers, params.Peers)
-	log.Biz.Infof("%s [dbs] local:%#v, remote: %#v\n", logPrefix, n.dbs, params.DBs)
+	log.Biz.Infof("%s [peers] local:%#v, remote: %#v\n", logPrefix, node.peers, params.Peers)
+	log.Biz.Infof("%s [dbs] local:%#v, remote: %#v\n", logPrefix, node.dbs, params.DBs)
 
-	n.Lock()
-	defer n.Unlock()
+	node.Lock()
+	defer node.Unlock()
 
-	n.pool.Set(params.Peers...)
-	n.peers = params.Peers
-	n.dbs = params.DBs
+	node.pool.Set(params.Peers...)
+	node.peers = params.Peers
+	node.dbs = params.DBs
 
 	ctx.JSON(http.StatusOK, nil)
 }
 
-func (n *Node) fetchData(ctx groupcache.Context, key string, dest groupcache.Sink) error {
-	if n.fastDB == "" {
-		return n.tryAllDBfind(ctx, key, dest)
+func (node *Node) fetchData(ctx groupcache.Context, key string, dest groupcache.Sink) error {
+	if node.fastDB == "" {
+		return node.tryAllDBfind(ctx, key, dest)
 	}
 
-	data, err := n.find(key, n.fastDB)
+	data, err := node.find(key, node.fastDB)
 	if err == ErrDataNotFound {
 		return err
 	}
 
 	if err != nil {
 		log.DB.Error(logPrefix, err)
-		go n.setFastDB("")
-		return n.tryAllDBfind(ctx, key, dest)
+		go node.setFastDB("")
+		return node.tryAllDBfind(ctx, key, dest)
 	}
 
 	dest.SetBytes(data)
 	return nil
 }
 
-func (n *Node) find(key string, url string) ([]byte, error) {
+func (node *Node) find(key string, url string) ([]byte, error) {
 	url = fmt.Sprintf(dbGetURLFormat, urlutil.MakeURL(url), key)
 	resp, err := httpGetter.Get(url)
 	if err != nil {
@@ -299,9 +299,9 @@ func (n *Node) find(key string, url string) ([]byte, error) {
 	return nil, fmt.Errorf("%s failed to fetch data", logPrefix)
 }
 
-func (n *Node) tryAllDBfind(ctx groupcache.Context, key string, dest groupcache.Sink) error {
-	dbs := make([]string, len(n.dbs))
-	copy(dbs, n.dbs)
+func (node *Node) tryAllDBfind(ctx groupcache.Context, key string, dest groupcache.Sink) error {
+	dbs := make([]string, len(node.dbs))
+	copy(dbs, node.dbs)
 	log.Biz.Infoln(logPrefix, "start fetchData:", time.Now(), dbs)
 	if len(dbs) == 0 {
 		return fmt.Errorf("%s databases are not available\n", logPrefix)
@@ -315,10 +315,10 @@ func (n *Node) tryAllDBfind(ctx groupcache.Context, key string, dest groupcache.
 
 	for _, db := range dbs {
 		go func(url string) {
-			val, err := n.find(key, url)
+			val, err := node.find(key, url)
 
-			n.Lock()
-			defer n.Unlock()
+			node.Lock()
+			defer node.Unlock()
 			if len(val) > 0 || err == ErrDataNotFound || completeCount == len(dbs) {
 				if !got {
 					got = true
@@ -333,7 +333,7 @@ func (n *Node) tryAllDBfind(ctx groupcache.Context, key string, dest groupcache.
 
 	select {
 	case <-time.After(dbQueryTimeout):
-		go n.setFastDB("")
+		go node.setFastDB("")
 		return ErrDatabaseQueryTimeout
 
 	case value := <-data:
@@ -341,16 +341,16 @@ func (n *Node) tryAllDBfind(ctx groupcache.Context, key string, dest groupcache.
 		dest.SetBytes(value)
 
 		if len(value) > 0 || resErr == ErrDataNotFound {
-			go n.setFastDB(fastURL)
+			go node.setFastDB(fastURL)
 		}
 
 		return resErr
 	}
 }
 
-func (n *Node) setFastDB(db string) {
-	n.Lock()
-	defer n.Unlock()
+func (node *Node) setFastDB(db string) {
+	node.Lock()
+	defer node.Unlock()
 
-	n.fastDB = db
+	node.fastDB = db
 }

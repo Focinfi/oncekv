@@ -1,10 +1,11 @@
 package mock
 
 import (
-	"fmt"
 	"sync"
 
 	"sort"
+
+	"errors"
 
 	"github.com/Focinfi/oncekv/log"
 )
@@ -37,7 +38,7 @@ func (s *Store) Add(key, value string) error {
 	s.Lock()
 	defer s.Unlock()
 	if _, ok := s.data[key]; ok {
-		return fmt.Errorf("duplicate")
+		return errors.New("duplicate")
 	}
 
 	s.data[key] = value

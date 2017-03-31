@@ -15,8 +15,8 @@ import (
 )
 
 var (
-	defaulAddr = config.Config.AdminAddr
-	wsupgrader = websocket.Upgrader{
+	defaultAddr = config.Config.AdminAddr
+	wsUpgrader  = websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 		CheckOrigin: func(r *http.Request) bool {
@@ -70,7 +70,7 @@ func (a *Admin) handleDBs(ctx *gin.Context) {
 }
 
 func (a *Admin) handleWebSocketCaches(ctx *gin.Context) {
-	conn, err := wsupgrader.Upgrade(ctx.Writer, ctx.Request, nil)
+	conn, err := wsUpgrader.Upgrade(ctx.Writer, ctx.Request, nil)
 	if err != nil {
 		log.Internal.Error(err)
 		return
@@ -105,7 +105,7 @@ func (a *Admin) handleWebSocketCaches(ctx *gin.Context) {
 }
 
 func (a *Admin) handleWebSocketDBs(ctx *gin.Context) {
-	conn, err := wsupgrader.Upgrade(ctx.Writer, ctx.Request, nil)
+	conn, err := wsUpgrader.Upgrade(ctx.Writer, ctx.Request, nil)
 	if err != nil {
 		log.Internal.Error(err)
 		return
@@ -146,12 +146,12 @@ func (a *Admin) handleWebSocketDBs(ctx *gin.Context) {
 var Default *Admin
 
 func init() {
-	admin := &Admin{
+	adm := &Admin{
 		CacheMaster: cache.Default,
 		DBMaster:    db.Default,
-		addr:        defaulAddr,
+		addr:        defaultAddr,
 	}
 
-	admin.Engine = admin.newServer()
-	Default = admin
+	adm.Engine = adm.newServer()
+	Default = adm
 }

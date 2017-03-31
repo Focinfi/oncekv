@@ -16,7 +16,7 @@ func defaultGetterCluster() mock.HTTPGetter {
 	servers = append(servers, dbs...)
 
 	for i, cache := range servers {
-		delay := idealReponseDuration * time.Duration(i%2)
+		delay := idealResponseDuration * time.Duration(i%2)
 		fmt.Printf("%s delay=%v\n", cache, delay)
 		getter := mock.MakeHTTPGetter(cache, `{"key":"foo", "value":"bar"}`, nil, delay)
 		host := mock.HostOfURL(cache)
@@ -29,7 +29,7 @@ func defaultGetterCluster() mock.HTTPGetter {
 func defaultPosterCluster() mock.HTTPPoster {
 	cluster := map[string]mock.HTTPPoster{}
 	for i, db := range dbs {
-		delay := idealReponseDuration * time.Duration(i%2)
+		delay := idealResponseDuration * time.Duration(i%2)
 		fmt.Printf("%s delay=%v\n", db, delay)
 		poster := mock.MakeHTTPPoster(db, "", nil, delay)
 		host := mock.HostOfURL(db)
@@ -63,7 +63,7 @@ func TestNewKV(t *testing.T) {
 }
 
 func TestCache(t *testing.T) {
-	t.Log(requestTimeout, idealReponseDuration)
+	t.Log(requestTimeout, idealResponseDuration)
 	setDefaultMockCacheAndDB()
 	setDefaultMockHTTP()
 

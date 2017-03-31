@@ -25,7 +25,7 @@ var (
 	cacheCluster = cluster(admin.Default.CacheMaster)
 )
 
-// lient for requesting oncekv
+// client for requesting oncekv
 type client struct {
 	// meta
 	sync.RWMutex
@@ -42,18 +42,18 @@ type client struct {
 }
 
 func newClient() (*client, error) {
-	client := &client{
+	cli := &client{
 		dbs:    []string{},
 		caches: []string{},
 	}
 
-	if err := client.update(); err != nil {
+	if err := cli.update(); err != nil {
 		return nil, err
 	}
 
-	go client.refresh()
+	go cli.refresh()
 
-	return client, nil
+	return cli, nil
 }
 
 func (c *client) setFastCache(cacheURL string) {

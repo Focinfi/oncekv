@@ -17,11 +17,11 @@ import (
 import "github.com/Focinfi/oncekv/utils/mock"
 
 var (
-	httpAddr   = "127.0.0.1:55441"
-	nodeAddr   = "127.0.0.1:55442"
-	peers      = []string{"127.0.0.1:50001", "127.0.0.1:50002"}
-	dbs        = []string{"127.0.0.1:50003"}
-	masterAddr = config.Config.CacheMasterAddr
+	httpAddr       = "127.0.0.1:55441"
+	groupcacheAddr = "127.0.0.1:55442"
+	peers          = []string{"127.0.0.1:50001", "127.0.0.1:50002"}
+	dbs            = []string{"127.0.0.1:50003"}
+	masterAddr     = config.Config.CacheMasterAddr
 )
 
 func mockMaster(t *testing.T, peers, dbs []string) {
@@ -39,16 +39,16 @@ func mockMaster(t *testing.T, peers, dbs []string) {
 
 func TestJoinAndMeta(t *testing.T) {
 	mockMaster(t, peers, dbs)
-	node := New(httpAddr, nodeAddr, masterAddr)
-	go node.Start()
+	n := New(httpAddr, groupcacheAddr, masterAddr)
+	go n.Start()
 	time.Sleep(time.Millisecond)
 
-	if !reflect.DeepEqual(node.peers, peers) {
-		t.Errorf("failed to init peers, expect: %v, got: %v\n", peers, node.peers)
+	if !reflect.DeepEqual(n.peers, peers) {
+		t.Errorf("failed to init peers, expect: %v, got: %v\n", peers, n.peers)
 	}
 
-	if !reflect.DeepEqual(node.dbs, dbs) {
-		t.Errorf("failed to init peers, expect: %v, got: %v\n", dbs, node.dbs)
+	if !reflect.DeepEqual(n.dbs, dbs) {
+		t.Errorf("failed to init peers, expect: %v, got: %v\n", dbs, n.dbs)
 	}
 
 	newPeers := append(peers, "127.0.0.1:50006")
@@ -68,15 +68,15 @@ func TestJoinAndMeta(t *testing.T) {
 	}
 
 	if res.StatusCode != http.StatusOK {
-		t.Fatalf("node can not handle POST /meta, response code is %d\n", res.StatusCode)
+		t.Fatalf("n can not handle POST /meta, response code is %d\n", res.StatusCode)
 	}
 
-	if !reflect.DeepEqual(node.peers, newPeers) {
-		t.Errorf("failed to update peers after /meta, expect: %v, got: %v\n", newPeers, node.peers)
+	if !reflect.DeepEqual(n.peers, newPeers) {
+		t.Errorf("failed to update peers after /meta, expect: %v, got: %v\n", newPeers, n.peers)
 	}
 
-	if !reflect.DeepEqual(node.dbs, newDBs) {
-		t.Errorf("failed to update peers after /meta, expect: %v, got: %v\n", newDBs, node.dbs)
+	if !reflect.DeepEqual(n.dbs, newDBs) {
+		t.Errorf("failed to update peers after /meta, expect: %v, got: %v\n", newDBs, n.dbs)
 	}
 
 	// mock with getters
@@ -110,7 +110,7 @@ func TestJoinAndMeta(t *testing.T) {
 		t.Errorf("failed to response the value, expect bar, got %s\n", value)
 	}
 
-	if node.fastDB != dbs[0] {
-		t.Errorf("failed to set fastDB, expect: %s, got: %v\n", dbs[0], node.fastDB)
+	if n.fastDB != dbs[0] {
+		t.Errorf("failed to set fastDB, expect: %s, got: %v\n", dbs[0], n.fastDB)
 	}
 }

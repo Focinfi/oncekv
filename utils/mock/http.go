@@ -99,7 +99,7 @@ func HTTPGetterCluster(getterMap map[string]HTTPGetter) HTTPGetter {
 	})
 }
 
-// HTTPPosterCluster combine postter into one postter
+// HTTPPosterCluster combine poster into one poster
 func HTTPPosterCluster(posterMap map[string]HTTPPoster) HTTPPoster {
 	return HTTPPosterFunc(func(rawurl string, contentType string, body io.Reader) (*http.Response, error) {
 		host := HostOfURL(rawurl)

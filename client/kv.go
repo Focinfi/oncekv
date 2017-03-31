@@ -23,8 +23,8 @@ const (
 )
 
 var (
-	requestTimeout       = config.Config.HTTPRequestTimeout
-	idealReponseDuration = config.Config.IdealResponseDuration
+	requestTimeout        = config.Config.HTTPRequestTimeout
+	idealResponseDuration = config.Config.IdealResponseDuration
 	// ErrDataNotFound for data not found response
 	ErrDataNotFound = fmt.Errorf("%s data not found", logPrefix)
 
@@ -71,7 +71,7 @@ func NewKV(option *Option) (*KV, error) {
 	if option == nil {
 		option = &Option{
 			RequestTimeout:        requestTimeout,
-			IdealResponseDuration: idealReponseDuration,
+			IdealResponseDuration: idealResponseDuration,
 		}
 	}
 
@@ -113,7 +113,7 @@ func (kv *KV) Put(key string, value string) error {
 		return kv.tryAllDBSet(key, value)
 	}
 
-	if duration > idealReponseDuration {
+	if duration > idealResponseDuration {
 		// remove fastDB
 		go func() { kv.cli.setFastDB("") }()
 	}
@@ -127,7 +127,7 @@ func (kv *KV) cache(key string) (string, error) {
 		return kv.tryAllCaches(key)
 	}
 
-	val, _, err := kv.find(key, url, idealReponseDuration)
+	val, _, err := kv.find(key, url, idealResponseDuration)
 	if err == ErrDataNotFound {
 		return "", err
 	}
@@ -141,7 +141,7 @@ func (kv *KV) cache(key string) (string, error) {
 
 func (kv *KV) get(key string) (string, error) {
 	if kv.cli.fastDB == "" {
-		return kv.tryAllDBfind(key)
+		return kv.tryAllDBFind(key)
 	}
 
 	val, duration, err := kv.find(key, kv.cli.fastDB, requestTimeout)
@@ -151,17 +151,17 @@ func (kv *KV) get(key string) (string, error) {
 
 	if err != nil {
 		log.DB.Error(logPrefix, err)
-		return kv.tryAllDBfind(key)
+		return kv.tryAllDBFind(key)
 	}
 
-	if duration > idealReponseDuration {
+	if duration > idealResponseDuration {
 		go func() { kv.cli.setFastDB("") }()
 	}
 
 	return val, nil
 }
 
-func (kv *KV) tryAllDBfind(key string) (string, error) {
+func (kv *KV) tryAllDBFind(key string) (string, error) {
 	dbs := make([]string, len(kv.cli.dbs))
 	copy(dbs, kv.cli.dbs)
 	log.Biz.Infoln(logPrefix, "start get:", time.Now(), dbs)

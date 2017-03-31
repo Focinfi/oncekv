@@ -27,17 +27,17 @@ func mockCacheAndDB(caches []string, dbs []string) {
 func TestNew(t *testing.T) {
 	setDefaultMockCacheAndDB()
 
-	client, err := newClient()
+	cli, err := newClient()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if !reflect.DeepEqual(client.caches, caches) {
-		t.Errorf("failed to set caches, expect %v, got %v", caches, client.caches)
+	if !reflect.DeepEqual(cli.caches, caches) {
+		t.Errorf("failed to set caches, expect %v, got %v", caches, cli.caches)
 	}
 
-	if !reflect.DeepEqual(client.dbs, dbs) {
-		t.Errorf("failed to set dbs, expect %v, got %v", dbs, client.dbs)
+	if !reflect.DeepEqual(cli.dbs, dbs) {
+		t.Errorf("failed to set dbs, expect %v, got %v", dbs, cli.dbs)
 	}
 
 	// test refresh
@@ -50,11 +50,11 @@ func TestNew(t *testing.T) {
 	case <-time.After(time.Second * 2):
 	}
 
-	if !reflect.DeepEqual(client.caches, newCaches) {
-		t.Errorf("failed to set caches, expect %v, got %v", caches, client.caches)
+	if !reflect.DeepEqual(cli.caches, newCaches) {
+		t.Errorf("failed to set caches, expect %v, got %v", caches, cli.caches)
 	}
 
-	if !reflect.DeepEqual(client.dbs, newDBs) {
-		t.Errorf("failed to set dbs, expect %v, got %v", dbs, client.dbs)
+	if !reflect.DeepEqual(cli.dbs, newDBs) {
+		t.Errorf("failed to set dbs, expect %v, got %v", dbs, cli.dbs)
 	}
 }

@@ -20,13 +20,13 @@ At the same time, limitation gives us chances to improve performance but still e
 
 ### Have a try
 
-1.Change working directory into `example`
+#### 1.Change working directory into `example`
 
 ```
 cd $GOPATH/src/github.com/Focinfi/oncekv/example
 ```
 
-2.Start the admin server
+#### 2.Start the admin server
 
 ```
 go run ./admin/admin.go
@@ -34,7 +34,8 @@ go run ./admin/admin.go
 
 This server provide API of known server list for the front end porject and starts the database master server.
 
-3.Start the admin front end server
+#### 3.Start the admin front end server
+
 ```
 cd $GOPATH/src/github.com/Focinfi/oncekv/admin/oncekv
 npm run dev
@@ -42,7 +43,7 @@ npm run dev
 
 It shows only title, now, let's add a database node.
 
-4.Start one database node
+#### 4.Start one database node
 
 ```
 bash ./databases/node/node1.sh
@@ -53,7 +54,7 @@ And the admin page will show its stats.
 
 Then add another node by `bash ./databases/node/node2.sh`
 
-5.Start the cache cluster
+#### 5.Start the cache cluster
 
 Start the master:
 
@@ -79,7 +80,7 @@ Start the cache third node:
 bash ./cache/node/node3.sh
 ```
 
-6.Set/Get some key/vlaue pairs:
+#### 6.Set/Get some key/vlaue pairs:
 
 ```
 # set foo/bar into database leader

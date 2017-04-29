@@ -9,7 +9,7 @@ import (
 	cache "github.com/Focinfi/oncekv/cache/master"
 	"github.com/Focinfi/oncekv/config"
 	db "github.com/Focinfi/oncekv/db/master"
-	"github.com/Focinfi/sqs/log"
+	"github.com/Focinfi/oncekv/log"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )

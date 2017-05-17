@@ -2,11 +2,9 @@ package master
 
 import (
 	"fmt"
-	"testing"
-
-	"time"
-
 	"reflect"
+	"testing"
+	"time"
 
 	"github.com/Focinfi/oncekv/utils/mock"
 )

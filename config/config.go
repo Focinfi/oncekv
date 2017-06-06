@@ -50,6 +50,9 @@ var Config = struct {
 	RaftNodesKey  string `default:"oncekv.db.nodes" env:"ONCEKV_DB_NODES_KEY"`
 	CacheNodesKey string `default:"oncekv.cache.nodes" env:"ONCEKV_CACHE_NODES_KEY"`
 
+	// db shard master
+	ShardCount int `default:"10" env:"ONCEKV_SHARD_COUNT"`
+
 	// cache server
 	CacheMasterAddr string `default:"127.0.0.1:5550" env:"ONCEKV_CACHE_MASTER_ADDR"`
 	// default is 10M

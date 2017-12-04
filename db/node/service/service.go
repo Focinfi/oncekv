@@ -275,7 +275,7 @@ func (s *Service) tryToJoin(peers []string) error {
 			continue
 		}
 
-		defer res.Body.Close()
+		res.Body.Close()
 		if res.StatusCode == http.StatusOK {
 			return nil
 		}

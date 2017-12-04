@@ -135,6 +135,8 @@ func TestJoin(t *testing.T) {
 
 	if reply == nil {
 		t.Errorf("empty reply from call Master.JoinNode")
+	} else {
+		t.Log("join reply:", reply)
 	}
 
 	// wait a moment

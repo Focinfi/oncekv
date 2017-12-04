@@ -18,7 +18,6 @@ import (
 	"github.com/Focinfi/oncekv/meta"
 	"github.com/Focinfi/oncekv/utils/mock"
 	"github.com/Focinfi/oncekv/utils/urlutil"
-	"github.com/gin-gonic/gin"
 )
 
 const (
@@ -132,12 +131,6 @@ func (m *Master) Peers() ([]string, error) {
 	return peers.httpAddrs(), nil
 }
 
-func newServer(m *Master) *gin.Engine {
-	server := gin.Default()
-	server.POST("/join", m.handleJoinNode)
-	return server
-}
-
 func (m *Master) setNodesMap(peers nodesMap) {
 	m.Lock()
 	defer m.Unlock()
@@ -157,32 +150,10 @@ func (m *Master) JoinNode(args *JoinParam, reply *PeerParam) error {
 		return fmt.Errorf("%s fail updateNodesMap, err: %v", logPrefix, err)
 	}
 
-	reply = &PeerParam{Peers: m.nodesMap.httpAddrs(), DBs: m.dbs}
+	*reply = PeerParam{Peers: m.nodesMap.httpAddrs(), DBs: m.dbs}
 	m.Unlock()
 	log.DB.Infoln("join:", m.nodesMap)
 	return nil
-}
-
-func (m *Master) handleJoinNode(ctx *gin.Context) {
-	var params = &JoinParam{}
-
-	err := ctx.BindJSON(params)
-	if err != nil || params.HTTPAddr == "" || params.NodeAddr == "" {
-		ctx.JSON(http.StatusBadRequest, nil)
-		return
-	}
-
-	m.Lock()
-	m.nodesMap[urlutil.MakeURL(params.HTTPAddr)] = urlutil.MakeURL(params.NodeAddr)
-	if err := m.updateNodesMap(m.nodesMap); err != nil {
-		ctx.JSON(http.StatusInternalServerError, nil)
-		m.Unlock()
-		return
-	}
-
-	ctx.JSON(http.StatusOK, PeerParam{Peers: m.nodesMap.httpAddrs(), DBs: m.dbs})
-	m.Unlock()
-	log.DB.Infoln("join:", m.nodesMap)
 }
 
 func (m *Master) fetchNodesMap() (nodesMap, error) {

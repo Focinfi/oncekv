@@ -1,17 +1,18 @@
 package node
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/rpc"
 	"reflect"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/Focinfi/oncekv/cache/master"
 	"github.com/Focinfi/oncekv/config"
 	"github.com/Focinfi/oncekv/log"
 	"github.com/Focinfi/oncekv/utils/mock"
@@ -22,12 +23,11 @@ import (
 )
 
 const (
-	jsonHTTPHeader      = "application-type/json"
-	basePath            = "/oncekv/"
-	defaultGroup        = "kv"
-	masterJoinURLFormat = "%s/join"
-	dbGetURLFormat      = "%s/i/key/%s"
-	logPrefix           = "cache/node:"
+	jsonHTTPHeader = "application-type/json"
+	basePath       = "/oncekv/"
+	defaultGroup   = "kv"
+	dbGetURLFormat = "%s/i/key/%s"
+	logPrefix      = "cache/node:"
 )
 
 var (
@@ -67,7 +67,8 @@ type Node struct {
 	// cache peers
 	peers []string
 	// master url for update meta(dbs and peers)
-	masterAddr string
+	masterAddr      string
+	masterRPCClient mock.RPCClient
 
 	// node http server
 	*gin.Engine
@@ -91,13 +92,21 @@ func New(httpAddr string, nodeAddr string, masterAddr string) *Node {
 	cache.Engine = newServer(cache)
 	cache.group = newGroup(cache, defaultGroup)
 
+	client, err := rpc.DialHTTP("tcp", masterAddr)
+	if err != nil {
+		log.Internal.Errorf("fail rpc dialing, err: %v", err)
+	}
+	cache.masterRPCClient = client
+
 	return cache
 }
 
 // Start starts the server
 func (node *Node) Start() {
 	// try to get meta data
-	node.join()
+	if err := node.join(); err != nil {
+		log.Internal.Fatalf("%s fail join to master, err: %v", logPrefix, err)
+	}
 
 	// start the groupcache server
 	go func() {
@@ -175,46 +184,26 @@ func newGroup(n *Node, name string) *groupcache.Group {
 	return groupcache.NewGroup(name, groupcacheBytes, groupcache.GetterFunc(n.fetchData))
 }
 
-func (node *Node) join() {
+func (node *Node) join() error {
 	// build join param
-	b, err := json.Marshal(map[string]string{
-		"httpAddr": node.httpAddr,
-		"nodeAddr": node.nodeAddr,
-	})
-	if err != nil {
-		panic(err)
+	args := &master.JoinParam{
+		HTTPAddr: node.httpAddr,
+		NodeAddr: node.nodeAddr,
 	}
-
-	// post join
-	addr := urlutil.MakeURL(node.masterAddr)
-	response, err := httpPoster.Post(fmt.Sprintf(masterJoinURLFormat, addr), jsonHTTPHeader, bytes.NewReader(b))
-	if err != nil {
-		panic(err)
+	reply := &master.PeerParam{}
+	if err := node.masterRPCClient.Call("Master.JoinNode", args, reply); err != nil {
+		return fmt.Errorf("fail call Master.JoinNode, err: %v", err)
 	}
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusOK {
-		panic(fmt.Sprintf("%s failed to join into master, response status code=%d", logPrefix, response.StatusCode))
-	}
-
-	// read response
-	b, err = ioutil.ReadAll(response.Body)
-	if err != nil {
-		panic(err)
-	}
-
-	params := masterParam{}
-	if err := json.Unmarshal(b, &params); err != nil {
-		panic(err)
-	}
+	log.Internal.Infof("%s join reply: %v", logPrefix, reply)
 
 	node.Lock()
 	defer node.Unlock()
 
 	// update meta
-	node.pool.Set(params.Peers...)
-	node.peers = params.Peers
-	node.dbs = params.DBs
+	node.pool.Set(reply.Peers...)
+	node.peers = reply.Peers
+	node.dbs = reply.DBs
+	return nil
 }
 
 func (node *Node) handleMeta(ctx *gin.Context) {
@@ -253,7 +242,7 @@ func (node *Node) handleMeta(ctx *gin.Context) {
 
 func (node *Node) fetchData(ctx groupcache.Context, key string, dest groupcache.Sink) error {
 	if node.fastDB == "" {
-		return node.tryAllDBfind(ctx, key, dest)
+		return node.tryAllDBFind(ctx, key, dest)
 	}
 
 	data, err := node.find(key, node.fastDB)
@@ -264,7 +253,7 @@ func (node *Node) fetchData(ctx groupcache.Context, key string, dest groupcache.
 	if err != nil {
 		log.DB.Error(logPrefix, err)
 		go node.setFastDB("")
-		return node.tryAllDBfind(ctx, key, dest)
+		return node.tryAllDBFind(ctx, key, dest)
 	}
 
 	dest.SetBytes(data)
@@ -299,7 +288,7 @@ func (node *Node) find(key string, url string) ([]byte, error) {
 	return nil, fmt.Errorf("%s failed to fetch data", logPrefix)
 }
 
-func (node *Node) tryAllDBfind(ctx groupcache.Context, key string, dest groupcache.Sink) error {
+func (node *Node) tryAllDBFind(ctx groupcache.Context, key string, dest groupcache.Sink) error {
 	dbs := make([]string, len(node.dbs))
 	copy(dbs, node.dbs)
 	log.Biz.Infoln(logPrefix, "start fetchData:", time.Now(), dbs)

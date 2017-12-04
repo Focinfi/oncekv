@@ -1,10 +1,9 @@
 package master
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"net/http"
+	"net/rpc"
 	"reflect"
 	"testing"
 	"time"
@@ -64,7 +63,7 @@ func TestWatch(t *testing.T) {
 	}
 }
 
-func TestHearbeat(t *testing.T) {
+func TestHeartbeat(t *testing.T) {
 	nodes := testNodes()
 	// init nodes
 	nodes["127.0.0.1:55005"] = "127.0.0.1:55006"
@@ -118,16 +117,24 @@ func TestJoin(t *testing.T) {
 	// wait a moment
 	time.Sleep(time.Millisecond * 10)
 
-	param := joinParam{HTTPAddr: newNodeHTTP, NodeAddr: newNodeInternal}
+	param := JoinParam{HTTPAddr: newNodeHTTP, NodeAddr: newNodeInternal}
 	b, err = json.Marshal(param)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	url := fmt.Sprintf("%s/join", urlutil.MakeURL(testAddr))
-	_, err = http.Post(url, jsonHTTPHeader, bytes.NewReader(b))
+	client, err := rpc.DialHTTP("tcp", testAddr)
 	if err != nil {
-		t.Errorf("can not handle POST /join, err: %v\n", err)
+		t.Fatal("fail dailing, err:", err)
+	}
+
+	reply := &PeerParam{}
+	if err := client.Call("Master.JoinNode", &param, reply); err != nil {
+		t.Fatal("fail call Master.JoinNode, err:", err)
+	}
+
+	if reply == nil {
+		t.Errorf("empty reply from call Master.JoinNode")
 	}
 
 	// wait a moment

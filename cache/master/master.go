@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/rpc"
 	"sort"
 	"sync"
 	"time"
@@ -59,12 +61,12 @@ func (p nodesMap) nodeAddrs() []string {
 	return addrs
 }
 
-type peerParam struct {
+type PeerParam struct {
 	Peers []string `json:"peers"`
 	DBs   []string `json:"dbs"`
 }
 
-type joinParam struct {
+type JoinParam struct {
 	HTTPAddr string `json:"httpAddr"`
 	NodeAddr string `json:"nodeAddr"`
 }
@@ -77,8 +79,7 @@ type Master struct {
 	dbs      []string
 
 	// http server
-	server *gin.Engine
-	addr   string
+	addr string
 
 	// database store
 	meta        meta.Meta
@@ -104,7 +105,6 @@ func New(addr string) *Master {
 	log.Biz.Infoln(logPrefix, "Nodes: ", nodesMap)
 
 	m.nodesMap = nodesMap
-	m.server = newServer(m)
 	return m
 }
 
@@ -112,7 +112,14 @@ func New(addr string) *Master {
 func (m *Master) Start() {
 	go m.meta.WatchModify(m.nodesMapKey, func() { m.syncDBs() })
 	go m.heartbeat()
-	log.Biz.Fatal(m.server.Run(m.addr))
+
+	rpc.Register(m)
+	rpc.HandleHTTP()
+	l, e := net.Listen("tcp", m.addr)
+	if e != nil {
+		log.Internal.Fatal("listen error:", e)
+	}
+	go http.Serve(l, nil)
 }
 
 // Peers returns the httpAddrs
@@ -138,8 +145,26 @@ func (m *Master) setNodesMap(peers nodesMap) {
 	m.nodesMap = peers
 }
 
+func (m *Master) JoinNode(args *JoinParam, reply *PeerParam) error {
+	if args == nil || args.HTTPAddr == "" || args.NodeAddr == "" {
+		return fmt.Errorf("%s wrong params", logPrefix)
+	}
+
+	m.Lock()
+	m.nodesMap[urlutil.MakeURL(args.HTTPAddr)] = urlutil.MakeURL(args.NodeAddr)
+	if err := m.updateNodesMap(m.nodesMap); err != nil {
+		m.Unlock()
+		return fmt.Errorf("%s fail updateNodesMap, err: %v", logPrefix, err)
+	}
+
+	reply = &PeerParam{Peers: m.nodesMap.httpAddrs(), DBs: m.dbs}
+	m.Unlock()
+	log.DB.Infoln("join:", m.nodesMap)
+	return nil
+}
+
 func (m *Master) handleJoinNode(ctx *gin.Context) {
-	var params = &joinParam{}
+	var params = &JoinParam{}
 
 	err := ctx.BindJSON(params)
 	if err != nil || params.HTTPAddr == "" || params.NodeAddr == "" {
@@ -155,7 +180,7 @@ func (m *Master) handleJoinNode(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, peerParam{Peers: m.nodesMap.httpAddrs(), DBs: m.dbs})
+	ctx.JSON(http.StatusOK, PeerParam{Peers: m.nodesMap.httpAddrs(), DBs: m.dbs})
 	m.Unlock()
 	log.DB.Infoln("join:", m.nodesMap)
 }
@@ -211,7 +236,7 @@ func (m *Master) sendPeers(node string, nodes []string) error {
 		return err
 	}
 
-	params := peerParam{Peers: nodes, DBs: m.dbs}
+	params := PeerParam{Peers: nodes, DBs: m.dbs}
 
 	b, err := json.Marshal(&params)
 	if err != nil {

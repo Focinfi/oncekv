@@ -14,7 +14,10 @@ import (
 	"github.com/Focinfi/oncekv/utils/urlutil"
 )
 
-import "github.com/Focinfi/oncekv/utils/mock"
+import (
+	"github.com/Focinfi/oncekv/cache/master"
+	"github.com/Focinfi/oncekv/utils/mock"
+)
 
 var (
 	httpAddr       = "127.0.0.1:55441"
@@ -24,22 +27,21 @@ var (
 	masterAddr     = config.Config.CacheMasterAddr
 )
 
-func mockMaster(t *testing.T, peers, dbs []string) {
-	b, err := json.Marshal(masterParam{
-		Peers: peers,
-		DBs:   dbs,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// mock the poster
-	httpPoster = mock.MakeHTTPPoster(masterAddr, string(b), nil, 0)
-}
-
 func TestJoinAndMeta(t *testing.T) {
-	mockMaster(t, peers, dbs)
 	n := New(httpAddr, groupcacheAddr, masterAddr)
+	n.masterRPCClient = mock.RPCClientFunc(func(method string, args interface{}, reply interface{}) error {
+		r, ok := reply.(*master.PeerParam)
+		if ok {
+			t.Logf("is PeerParam")
+		}
+
+		*r = master.PeerParam{
+			Peers: peers,
+			DBs:   dbs,
+		}
+		t.Logf("mock master rpc Call, reply: %v", r)
+		return nil
+	})
 	go n.Start()
 	time.Sleep(time.Millisecond)
 

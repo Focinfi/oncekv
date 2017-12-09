@@ -69,11 +69,12 @@ func (m *Master) heartbeat() {
 			if err != nil {
 				log.DB.Error(err)
 				shouldRemove = true
-
-			} else if resp.StatusCode != http.StatusOK {
-				log.DB.Errorf("%s peer[%s] response code: %d\n", logPrefix, url, resp.StatusCode)
+			} else {
+				if resp.StatusCode != http.StatusOK {
+					log.DB.Errorf("%s peer[%s] response code: %d\n", logPrefix, url, resp.StatusCode)
+					shouldRemove = true
+				}
 				resp.Body.Close()
-				shouldRemove = true
 			}
 
 			if shouldRemove {
